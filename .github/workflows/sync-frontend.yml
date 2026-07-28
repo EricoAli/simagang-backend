@@ -51,6 +51,23 @@ jobs:
                 curl -fsSL "$FRONTEND_SOURCE_URL/$path" -o "$path" || true
               done
 
+          find . -type f \( -name '*.js' -o -name '*.map' -o -name '*.html' \) -print0 \
+            | xargs -0 sed -i 's#https://api.wony.app#https://simagangbe.trpl.space#g'
+
+          grep -oE '/js/app\.[A-Za-z0-9._-]+\.js' index.html | sort -u | while read -r path; do
+            fixed_path="$(dirname "$path")/app.trplapi.$(basename "$path" | sed 's/^app\.//')"
+            cp ".$path" ".$fixed_path"
+            [ -f ".$path.map" ] && cp ".$path.map" ".$fixed_path.map" || true
+            sed -i "s#$path#$fixed_path#g" index.html
+          done
+
+          grep -oE '/js/app-legacy\.[A-Za-z0-9._-]+\.js' index.html | sort -u | while read -r path; do
+            fixed_path="$(dirname "$path")/app-legacy.trplapi.$(basename "$path" | sed 's/^app-legacy\.//')"
+            cp ".$path" ".$fixed_path"
+            [ -f ".$path.map" ] && cp ".$path.map" ".$fixed_path.map" || true
+            sed -i "s#$path#$fixed_path#g" index.html
+          done
+
           tar -czf ../frontend-build.tgz .
 
       - name: Deploy frontend build
@@ -90,4 +107,3 @@ jobs:
           chown -R www-data:www-data /var/www/html/pmld-magang-fe
           rm -rf "$work" /tmp/simagang-frontend-build.tgz
           REMOTE
-
