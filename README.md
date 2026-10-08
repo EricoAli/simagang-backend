@@ -1,5 +1,7 @@
 # Testing API Progress
 
+dokumentasi: https://documenter.getpostman.com/view/52889337/2sBYHQ1NcY
+
 1. Auth 
 done
 
