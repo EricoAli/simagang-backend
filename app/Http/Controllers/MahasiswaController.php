@@ -10,8 +10,6 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
-
-
 class MahasiswaController extends Controller
 {
     /**
@@ -19,14 +17,23 @@ class MahasiswaController extends Controller
      */
     public function index(Request $request)
     {
-        $query = Mahasiswa::with(['user', 'magang']);
+        $query = Mahasiswa::with(['user', 'magang', 'prodi']);
 
-        $user = $request->user(); // ambil user dari token
-        $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id; // gunakan optional agar aman
+        $user = $request->user();
 
-        if ($user->role === 'mahasiswa' && $mahasiswaId) {
-            // asumsikan user.id terhubung ke mahasiswa.id atau ke field user_id di tabel mahasiswa
-            $query->where('mahasiswa_id', $mahasiswaId);
+        if ($user->role === 'mahasiswa') {
+            $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id;
+            if ($mahasiswaId) {
+                $query->where('mahasiswa_id', $mahasiswaId);
+            }
+        } elseif ($user->role === 'admin') {
+            $prodi_id = optional($user->admin)->prodi_id;
+            if ($prodi_id) {
+                $query->where('prodi_id', $prodi_id);
+            } else {
+                // Return empty if admin has no prodi
+                $query->where('prodi_id', -1);
+            }
         }
 
         if ($search = $request->query('q')) {
@@ -59,22 +66,43 @@ class MahasiswaController extends Controller
     public function show(Request $request)
     {
         $user = $request->user();
+
+        if ($user->role === 'admin' && $request->has('id')) {
+            $mahasiswa = Mahasiswa::with(['user', 'magang', 'prodi'])->findOrFail($request->query('id'));
+            
+            // Check authorization
+            $prodi_id = optional($user->admin)->prodi_id;
+            if ($mahasiswa->prodi_id !== $prodi_id) {
+                return response()->json(['message' => 'Unauthorized. Mahasiswa bukan dari prodi anda.'], 403);
+            }
+
+            return response()->json($mahasiswa, 200);
+        }
+
         $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
-        $mahasiswa = Mahasiswa::findOrFail($mahasiswa_id);
+        $mahasiswa = Mahasiswa::with(['prodi'])->findOrFail($mahasiswa_id);
 
         return response()->json($mahasiswa, 200);
     }
 
+    public function showDetail(Request $request, $id)
+    {
+        $user = $request->user();
+        $mahasiswa = Mahasiswa::with(['user', 'magang', 'prodi'])->findOrFail($id);
 
-    /**
-     * Tampilkan detail mahasiswa berdasarkan id (mahasiswa_id).
-     */
-    // public function show($id)
-    // {
-    //     $mahasiswa = Mahasiswa::with(['user', 'magang'])->findOrFail($id);
+        if ($user->role === 'admin') {
+            $prodi_id = optional($user->admin)->prodi_id;
+            if ($mahasiswa->prodi_id !== $prodi_id) {
+                return response()->json(['message' => 'Unauthorized. Mahasiswa bukan dari prodi anda.'], 403);
+            }
+        } elseif ($user->role === 'mahasiswa') {
+            if (optional($user->mahasiswa)->mahasiswa_id != $id) {
+                return response()->json(['message' => 'Unauthorized.'], 403);
+            }
+        }
 
-    //     return response()->json($mahasiswa, 200);
-    // }
+        return response()->json($mahasiswa, 200);
+    }
 
     /**
      * Simpan mahasiswa baru.
@@ -100,6 +128,16 @@ class MahasiswaController extends Controller
 
         try {
             $data = $validator->validated();
+            
+            $userReq = $request->user();
+            if ($userReq->role !== 'admin') {
+                return response()->json(['message' => 'Hanya admin yang dapat menambahkan mahasiswa'], 403);
+            }
+
+            $adminProdiId = optional($userReq->admin)->prodi_id;
+            if (!$adminProdiId) {
+                return response()->json(['message' => 'Admin tidak memiliki prodi'], 403);
+            }
 
             $nimParts = explode("/", $data['nim']);
             if (count($nimParts) !== 4) {
@@ -124,12 +162,13 @@ class MahasiswaController extends Controller
 
             $data['user_id'] = $user->user_id;
             $data['angkatan'] = $angkatan;
+            $data['prodi_id'] = $adminProdiId; // Override prodi_id by admin's prodi
 
             $mahasiswa = Mahasiswa::create($data);
 
             return response()->json([
                 'message' => 'Mahasiswa berhasil ditambahkan.',
-                'data' => $mahasiswa->load(['user', 'magang'])
+                'data' => $mahasiswa->load(['user', 'magang', 'prodi'])
             ], 201);
 
         } catch (\Exception $e) {
@@ -152,6 +191,8 @@ class MahasiswaController extends Controller
             'angkatan' => ['nullable', 'integer'],
         ];
 
+        // Validasi NIM uniqueness tapi ignore untuk id ini
+        
         $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
@@ -164,15 +205,27 @@ class MahasiswaController extends Controller
         $data = $validator->validated();
 
         try {
+            $userReq = $request->user();
             $mahasiswa = Mahasiswa::findOrFail($data['mahasiswa_id']);
-    
+
+            if ($userReq->role === 'admin') {
+                $adminProdiId = optional($userReq->admin)->prodi_id;
+                if ($mahasiswa->prodi_id !== $adminProdiId) {
+                    return response()->json(['message' => 'Unauthorized. Mahasiswa bukan dari prodi anda.'], 403);
+                }
+            } elseif ($userReq->role === 'mahasiswa') {
+                 if (optional($userReq->mahasiswa)->mahasiswa_id != $mahasiswa->mahasiswa_id) {
+                     return response()->json(['message' => 'Unauthorized.'], 403);
+                 }
+            }
+            
             unset($data['mahasiswa_id']);
     
             $mahasiswa->update($data);
     
             return response()->json([
                 'message' => 'Mahasiswa berhasil diperbarui',
-                'data' => $mahasiswa->fresh()->load(['user', 'magang'])
+                'data' => $mahasiswa->fresh()->load(['user', 'magang', 'prodi'])
             ], 200);
             
         } catch (\Throwable $th) {
@@ -185,10 +238,20 @@ class MahasiswaController extends Controller
     /**
      * Hapus mahasiswa.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
+            $userReq = $request->user();
             $mahasiswa = Mahasiswa::findOrFail($id);
+
+            if ($userReq->role === 'admin') {
+                $adminProdiId = optional($userReq->admin)->prodi_id;
+                if ($mahasiswa->prodi_id !== $adminProdiId) {
+                    return response()->json(['message' => 'Unauthorized. Mahasiswa bukan dari prodi anda.'], 403);
+                }
+            } else {
+                 return response()->json(['message' => 'Hanya admin yang dapat menghapus data.'], 403);
+            }
     
             $mahasiswa->delete();
     
@@ -209,6 +272,16 @@ class MahasiswaController extends Controller
         $request->validate([
             'file' => 'required|mimes:csv,txt',
         ]);
+        
+        $userReq = $request->user();
+        if ($userReq->role !== 'admin') {
+            return response()->json(['message' => 'Hanya admin yang dapat import data'], 403);
+        }
+
+        $adminProdiId = optional($userReq->admin)->prodi_id;
+        if (!$adminProdiId) {
+             return response()->json(['message' => 'Admin tidak memiliki prodi'], 403);
+        }
 
         $file = $request->file('file');
         $handle = fopen($file->getRealPath(), "r");
@@ -301,14 +374,16 @@ class MahasiswaController extends Controller
                     [
                         'user_id' => $user->user_id,
                         'nama' => $nama,
-                        'angkatan' => $angkatan
+                        'angkatan' => $angkatan,
+                        'prodi_id' => $adminProdiId
                     ]
                 );
 
                 $imported[] = [
                     'nim' => $nim,
                     'nama' => $nama,
-                    'angkatan' => $angkatan
+                    'angkatan' => $angkatan,
+                    'prodi_id' => $adminProdiId
                 ];
             }
 

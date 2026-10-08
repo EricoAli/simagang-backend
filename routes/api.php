@@ -75,6 +75,7 @@ Route::prefix('mahasiswa')
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/show', 'show');
+        Route::get('/{id}', 'showDetail');
         Route::delete('/{id}', 'destroy');
 
         // Custom

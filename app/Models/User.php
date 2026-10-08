@@ -48,6 +48,11 @@ class User extends Authenticatable
         return $this->hasOne(Mahasiswa::class, 'user_id', 'user_id');
     }
 
+    public function admin()
+    {
+        return $this->hasOne(Admin::class, 'user_id', 'user_id');
+    }
+
     public function dataAdmin()
     {
         return $this->hasOne(Admin::class, 'user_id', 'user_id');

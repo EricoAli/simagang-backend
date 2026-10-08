@@ -23,8 +23,12 @@ class MagangStoreTest extends TestCase
             'email' => 'testmhs@example.com',
         ]);
 
+        $this->seed(\Database\Seeders\ProdiSeeder::class);
+        $prodi = \App\Models\Prodi::where('kode_prodi', 'TRPL')->first();
+
         $mahasiswa = Mahasiswa::create([
             'user_id' => $user->user_id,
+            'prodi_id' => $prodi->prodi_id,
             'nim' => 'TEST12345',
             'nama' => 'Test Mahasiswa',
             'angkatan' => '2023',

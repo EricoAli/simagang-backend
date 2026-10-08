@@ -15,15 +15,21 @@ class Admin extends Model
 
     protected $fillable = [
         'user_id',
+        'prodi_id',
+        'nama',
     ];
     protected $hidden = [
         'created_at',
         'updated_at'
     ];
 
-
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
+
+    public function prodi()
+    {
+        return $this->belongsTo(Prodi::class, 'prodi_id', 'prodi_id');
     }
 }
