@@ -1,0 +1,1495 @@
+{
+  "info": {
+    "_postman_id": "446e56a1-2ec4-4de4-b955-c4cf37f29821",
+    "name": "SIMAGANG-API (Admin & Super Admin)",
+    "description": "Dokumentasi API backend SIMAGANG DTEDI berfokus pada modul Super Admin dan Admin Program Studi (TRPL, TRIK, TRI, TRE).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login Super Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "    pm.environment.set(\"super_admin_token\", json.access_token);",
+                  "}",
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Role is super_admin\", () => pm.expect(json.role).to.eql(\"super_admin\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"superadmin\",\n    \"password\": \"SuperAdminPassword123!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Admin TRPL",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "    pm.environment.set(\"token\", json.access_token);",
+                  "}",
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Role is admin\", () => pm.expect(json.role).to.eql(\"admin\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin_trpl\",\n    \"password\": \"GANTI_DENGAN_PASSWORD_KUAT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Admin TRIK",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "    pm.environment.set(\"token_trik\", json.access_token);",
+                  "}",
+                  "pm.test(\"Status code is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin_trik\",\n    \"password\": \"GANTI_DENGAN_PASSWORD_KUAT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Admin TRI",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin_tri\",\n    \"password\": \"AdminTRIpassword!2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Admin TRE",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"admin_tre\",\n    \"password\": \"AdminTREpassword!2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Super-Admin",
+      "item": [
+        {
+          "name": "List Admin Prodi",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Admin Prodi TRPL",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_trpl\",\n  \"email\": \"admin.trpl@simagang.dev\",\n  \"password\": \"GANTI_DENGAN_PASSWORD_KUAT\",\n  \"nama\": \"Admin Prodi TRPL\",\n  \"prodi_id\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Admin Prodi TRIK",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_trik\",\n  \"email\": \"admin.trik@simagang.dev\",\n  \"password\": \"GANTI_DENGAN_PASSWORD_KUAT\",\n  \"nama\": \"Admin Prodi TRIK\",\n  \"prodi_id\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Admin Prodi TRI",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_tri\",\n  \"email\": \"admin.tri@simagang.dev\",\n  \"password\": \"AdminTRIpassword!2026\",\n  \"nama\": \"Admin Prodi TRI\",\n  \"prodi_id\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Admin Prodi TRE",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_tre\",\n  \"email\": \"admin.tre@simagang.dev\",\n  \"password\": \"AdminTREpassword!2026\",\n  \"nama\": \"Admin Prodi TRE\",\n  \"prodi_id\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Detail Admin Prodi",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi/{{admin_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi", "{{admin_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Admin Prodi",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nama\": \"Koordinator Magang TRPL Pembaruan\",\n  \"email\": \"koordinator.trpl@simagang.dev\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi/{{admin_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi", "{{admin_id}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Status Admin Prodi (Aktif / Nonaktif)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_active\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/super-admin/admin-prodi/{{admin_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "admin-prodi", "{{admin_id}}", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Super Admin (Agregat 4 Prodi)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/super-admin/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "dashboard"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dashboard Super Admin (Filter per Prodi)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{super_admin_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/super-admin/dashboard?prodi_id=1",
+              "host": ["{{base_url}}"],
+              "path": ["super-admin", "dashboard"],
+              "query": [
+                {
+                  "key": "prodi_id",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Dashboard",
+          "item": [
+            {
+              "name": "Dashboard Admin (Terisolasi Prodi)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/dashboard/admin",
+                  "host": ["{{base_url}}"],
+                  "path": ["dashboard", "admin"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Mahasiswa",
+          "item": [
+            {
+              "name": "List Mahasiswa (Isolasi Prodi)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Mahasiswa TRPL",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "pm.test(\"Status is 201\", () => pm.expect(pm.response.code).to.eql(201));",
+                      "if (json.data && json.data.mahasiswa_id) {",
+                      "    pm.environment.set(\"mahasiswa_id\", json.data.mahasiswa_id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nim\": \"24/500001/SV/10001\",\n  \"nama\": \"Mahasiswa Uji TRPL\",\n  \"angkatan\": \"2024\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Mahasiswa TRIK",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json.data && json.data.mahasiswa_id) {",
+                      "    pm.environment.set(\"mahasiswa_trik_id\", json.data.mahasiswa_id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token_trik}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nim\": \"24/500002/SV/10002\",\n  \"nama\": \"Mahasiswa Uji TRIK\",\n  \"angkatan\": \"2024\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Mahasiswa - Ignore Client Prodi",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"nim\": \"24/123458/TK/123458\",\n    \"nama\": \"Test Mahasiswa Cross Prodi\",\n    \"angkatan\": 2024,\n    \"prodi_id\": 2\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Mahasiswa",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa/{{mahasiswa_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa", "{{mahasiswa_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Mahasiswa",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"mahasiswa_id\": {{mahasiswa_id}},\n    \"nim\": \"24/500001/SV/10001\",\n    \"nama\": \"Mahasiswa Uji TRPL Updated\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa/update",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa", "update"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Mahasiswa",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa/{{mahasiswa_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa", "{{mahasiswa_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Import Mahasiswa (CSV)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa/import",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa", "import"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Cross-Prodi (Should 403)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Cross-prodi access is forbidden\", () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mahasiswa/{{mahasiswa_trik_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["mahasiswa", "{{mahasiswa_trik_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Dosen Pembimbing",
+          "item": [
+            {
+              "name": "List Dosen Pembimbing",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/dosbing",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Dosen Pembimbing",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json.data && json.data.dosbing_id) {",
+                      "    pm.environment.set(\"dosbing_id\", json.data.dosbing_id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nip\": \"198701012015011001\",\n  \"nama\": \"Dr. Ir. Dosen Pembimbing DTEDI, M.Kom.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/dosbing",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Dosen Pembimbing",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/dosbing/{{dosbing_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing", "{{dosbing_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Dosen Pembimbing",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nip\": \"198701012015011001\",\n  \"nama\": \"Dr. Ir. Dosen Pembimbing DTEDI, M.Eng.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/dosbing/{{dosbing_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing", "{{dosbing_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Jumlah Dosen Pembimbing",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/dosbing/jumlah",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing", "jumlah"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Dosen Pembimbing",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/dosbing/{{dosbing_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["dosbing", "{{dosbing_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Mitra",
+          "item": [
+            {
+              "name": "List Mitra",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mitra",
+                  "host": ["{{base_url}}"],
+                  "path": ["mitra"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Mitra",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json.data && json.data.mitra_id) {",
+                      "    pm.environment.set(\"mitra_id\", json.data.mitra_id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nama_mitra\": \"PT Solusi Teknologi Nusantara\",\n  \"email\": \"hrd@solusitek.co.id\",\n  \"narahubung\": \"Budi Santoso - HR Lead\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mitra",
+                  "host": ["{{base_url}}"],
+                  "path": ["mitra"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Mitra",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"nama_mitra\": \"PT Solusi Teknologi Nusantara Tbk\",\n  \"email\": \"hrd@solusitek.co.id\",\n  \"narahubung\": \"Budi Santoso - Senior HR Lead\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/mitra/{{mitra_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["mitra", "{{mitra_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Jumlah Mitra",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mitra/jumlah",
+                  "host": ["{{base_url}}"],
+                  "path": ["mitra", "jumlah"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Mitra",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mitra/{{mitra_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["mitra", "{{mitra_id}}"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Magang (ADM)",
+          "item": [
+            {
+              "name": "List Magang (Isolasi Prodi)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/magang",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Magang",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/magang/{{magang_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang", "{{magang_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Lengkap Magang",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/magang/{{magang_id}}/detail",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang", "{{magang_id}}", "detail"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Data Magang (Admin)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status_magang\": \"berlangsung\",\n  \"dosbing_id\": {{dosbing_id}},\n  \"mitra_id\": {{mitra_id}}\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/magang/{{magang_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang", "{{magang_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Data Magang",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/magang/{{magang_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang", "{{magang_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Export Excel Magang",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/magang/export/excel",
+                  "host": ["{{base_url}}"],
+                  "path": ["magang", "export", "excel"]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Manajemen Jadwal Presentasi (PI)",
+          "item": [
+            {
+              "name": "List Jadwal Presentasi (Isolasi Prodi)",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Jadwal Presentasi TRPL",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "if (json.data && json.data.jadwal_id) {",
+                      "    pm.environment.set(\"jadwal_id\", json.data.jadwal_id);",
+                      "}"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"magang_id\": {{magang_id}},\n  \"tanggal_presentasi\": \"2026-11-20\",\n  \"waktu_mulai\": \"09:00\",\n  \"waktu_selesai\": \"10:30\",\n  \"ruangan\": \"Lab Software 201\",\n  \"tempat\": \"Gedung TILC SV UGM\",\n  \"keterangan\": \"Presentasi Akhir Proyek Industri\",\n  \"status\": \"terjadwal\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Detail Jadwal Presentasi",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi", "{{jadwal_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Jadwal Presentasi",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ruangan\": \"Ruang Sidang Utama TILC\",\n  \"keterangan\": \"Jadwal telah dikonfirmasi\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi", "{{jadwal_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Jadwal Presentasi",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi", "{{jadwal_id}}"]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Jadwal Cross-Prodi (Should 403)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"Cross-prodi schedule creation is forbidden\", () => pm.response.to.have.status(403));"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{token}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"magang_id\": {{magang_trik_id}},\n  \"tanggal_presentasi\": \"2026-11-20\",\n  \"waktu_mulai\": \"09:00\",\n  \"waktu_selesai\": \"10:30\",\n  \"ruangan\": \"Lab Software 201\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/jadwal-presentasi",
+                  "host": ["{{base_url}}"],
+                  "path": ["jadwal-presentasi"]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
