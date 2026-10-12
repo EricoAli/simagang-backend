@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -10,27 +11,25 @@ class RoleMiddleware
     /**
      * Handle an incoming request.
      *
-     * @param \Illuminate\Http\Request $request
-     * @param \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response) $next
-     * @param mixed ...$roles
-     * @return \Symfony\Component\HttpFoundation\Response
+     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  mixed  ...$roles
      */
     public function handle(Request $request, Closure $next, ...$roles): Response
     {
         $user = $request->user();
 
         // Jika tidak login
-        if (!$user) {
+        if (! $user) {
             abort(403, 'Unauthorized');
         }
 
-        // Jika role-nya sys, langsung lolos (testing only)
-        if ($user->role === 'sys') {
-            return $next($request);
+        // Cek status keaktifan akun
+        if (! $user->is_active) {
+            abort(403, 'Akun anda telah dinonaktifkan.');
         }
 
         // Periksa apakah role user sesuai salah satu role yang diberikan
-        if (!in_array($user->role, $roles)) {
+        if (! in_array($user->role, $roles)) {
             abort(403, 'Unauthorized');
         }
 

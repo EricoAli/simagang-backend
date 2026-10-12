@@ -8,18 +8,22 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
     protected $primaryKey = 'user_id';
 
+    protected $attributes = [
+        'is_active' => true,
+    ];
+
     protected $fillable = [
         'email',
         'username',
         'password',
-        'role', // constraint roles: admin, mahasiswa, mitra, dosbing
+        'role', // constraint roles: super_admin, admin, mahasiswa, mitra, dosbing
+        'is_active',
     ];
 
     protected $hidden = [
@@ -29,17 +33,22 @@ class User extends Authenticatable
         'tokens',
     ];
 
-
     protected function casts(): array
     {
         return [
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
     public function username()
     {
         return 'username'; // agar Auth pakai kolom username
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
     }
 
     // 🔗 Relasi

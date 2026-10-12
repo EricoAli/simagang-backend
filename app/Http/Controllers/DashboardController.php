@@ -15,26 +15,38 @@ use App\Models\Mitra;
 
 class DashboardController extends Controller
 {
-    public function fetchDashboardDataAdmin()
+    public function fetchDashboardDataAdmin(Request $request)
     {
-        $SemesterMagangTerbaru = Magang::latest('semester_magang')->value('semester_magang');
+        $user = $request->user();
+        if ($user->role !== 'admin' && $user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $queryMahasiswa = Mahasiswa::query();
+        $queryMagang = Magang::query();
+
+        if ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            if (!$prodiId) {
+                return response()->json(['message' => 'Admin tidak memiliki prodi'], 403);
+            }
+            $queryMahasiswa->where('prodi_id', $prodiId);
+            $queryMagang->whereHas('mahasiswa', fn($q) => $q->where('prodi_id', $prodiId));
+        }
+
+        $SemesterMagangTerbaru = (clone $queryMagang)->latest('semester_magang')->value('semester_magang');
 
         if ($SemesterMagangTerbaru) {
-            $jumlahMagangAktif = Magang::where('semester_magang', $SemesterMagangTerbaru)
+            $jumlahMagangAktif = (clone $queryMagang)->where('semester_magang', $SemesterMagangTerbaru)
                 ->count();
         } else {
             $jumlahMagangAktif = 0;
         }
 
-        $jumlahMahasiswa = Mahasiswa::count();
-
-        // 2. Hitung mitra
+        $jumlahMahasiswa = $queryMahasiswa->count();
         $jumlahMitra = Mitra::count();
-
-        // 3. Hitung dosen pembimbing
         $jumlahDosbing = Dosbing::count();
 
-        // Return JSON gabungan
         return response()->json([
             'jumlah_mahasiswa_aktif_magang' => $jumlahMagangAktif,
             'jumlah_mahasiswa' => $jumlahMahasiswa,
@@ -43,10 +55,14 @@ class DashboardController extends Controller
         ], 200);
     }
 
-    public function fetchDashboardDataMitra()
+    public function fetchDashboardDataMitra(Request $request)
     {
-        // Hitung jumlah mahasiswa magang untuk mitra yang sedang login
-        $mitraId = auth()->user()->mitra->mitra_id;
+        $user = $request->user();
+        if ($user->role !== 'mitra' || !$user->mitra) {
+            return response()->json(['message' => 'Hanya mitra yang dapat mengakses dashboard mitra'], 403);
+        }
+
+        $mitraId = $user->mitra->mitra_id;
 
         $jumlahMahasiswaMagangByMitra = Magang::where('mitra_id', $mitraId)
             ->distinct('mahasiswa_id')

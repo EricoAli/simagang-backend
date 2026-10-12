@@ -18,16 +18,17 @@ class AuthController extends Controller
             'username' => 'required|string|max:255|unique:users,username',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:6|confirmed', // password_confirmation wajib dikirim
-            'role' => 'required|string|in:mahasiswa,mitra,dosbing' // Admin tidak boleh register sendiri
+            'role' => 'required|string|in:mahasiswa,mitra,dosbing' // Admin & Super Admin tidak boleh register sendiri
         ]);
 
-        // Buat user baru
+        // Buat user baru (otomatis aktif)
+        // Catatan: Field 'name' divalidasi sesuai kontrak registrasi API, namun tabel users hanya menyimpan kredensial akun.
         $user = User::create([
-            'name' => $validatedData['name'],
             'username' => $validatedData['username'],
             'email' => $validatedData['email'],
             'password' => bcrypt($validatedData['password']),
-            'role' => $validatedData['role']
+            'role' => $validatedData['role'],
+            'is_active' => true,
         ]);
 
         // Buat token langsung setelah register
@@ -63,6 +64,12 @@ class AuthController extends Controller
 
         $user = $request->user();
 
+        // Cek apakah akun aktif
+        if (!$user->is_active) {
+            $user->tokens()->delete();
+            return response()->json(['message' => 'Akun anda telah dinonaktifkan. Silakan hubungi administrator.'], 403);
+        }
+
         // Buat token
         $token = $user->createToken('api-token')->plainTextToken;
 
@@ -77,7 +84,7 @@ class AuthController extends Controller
         return response()->json([
             'access_token' => $token,
             'role' => $user->role,
-            'user' => $user->load('mitra', 'mahasiswa'),
+            'user' => $user->load('mitra', 'mahasiswa', 'admin'),
             'token_type' => 'Bearer',
             'expires_at' => $token_expired,
         ]);

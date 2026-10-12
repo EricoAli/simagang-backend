@@ -19,6 +19,7 @@ use App\Http\Controllers\FotoMagangController;
 use App\Http\Controllers\NilaiMitraController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SuperAdminController;
 
 
 
@@ -160,7 +161,7 @@ Route::prefix('dokumen-magang')
 |--------------------------------------------------------------------------
 */
 Route::prefix('jadwal-presentasi')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing,super_admin'])
     ->controller(JadwalPresentasiController::class)->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
@@ -282,6 +283,27 @@ Route::prefix('laporan')
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
+        Route::get('/{id}/download', 'download');
         Route::put('/{id}', 'update');
         Route::delete('/{id}', 'destroy');
+    });
+
+/**
+ * -----------------------------------------------------------------------
+ * Super Admin Routes
+ * -----------------------------------------------------------------------
+ */
+Route::prefix('super-admin')
+    ->middleware(['auth.api:sanctum', 'role:super_admin'])
+    ->controller(SuperAdminController::class)
+    ->group(function () {
+        // Manajemen Admin Prodi
+        Route::get('/admin-prodi', 'indexAdminProdi');
+        Route::post('/admin-prodi', 'storeAdminProdi');
+        Route::get('/admin-prodi/{id}', 'showAdminProdi');
+        Route::put('/admin-prodi/{id}', 'updateAdminProdi');
+        Route::patch('/admin-prodi/{id}/status', 'toggleStatusAdminProdi');
+
+        // Dashboard
+        Route::get('/dashboard', 'dashboard');
     });

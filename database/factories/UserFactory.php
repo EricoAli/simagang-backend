@@ -11,10 +11,11 @@ class UserFactory extends Factory
     public function definition(): array
     {
         return [
-            'username' => $this->faker->unique()->userName(),
-            'email' => $this->faker->unique()->safeEmail(),
-            'password' => bcrypt('password'),
-            'role' => 'mahasiswa', // matches enum
+            'username'  => $this->faker->unique()->userName(),
+            'email'     => $this->faker->unique()->safeEmail(),
+            'password'  => bcrypt('password'),
+            'role'      => 'mahasiswa', // matches enum
+            'is_active' => true,
         ];
     }
 }
