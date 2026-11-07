@@ -36,14 +36,17 @@ class MahasiswaProdiTest extends TestCase
         return $user;
     }
 
+    private static int $nimSequence = 1000;
+
     private function createMahasiswa($prodi_id)
     {
         $user = User::factory()->create(['role' => 'mahasiswa']);
+        self::$nimSequence++;
         return Mahasiswa::create([
             'user_id' => $user->user_id,
             'prodi_id' => $prodi_id,
-            'nim' => '24/12345/SV/5432' . rand(1, 99),
-            'nama' => 'Mahasiswa Test',
+            'nim' => '24/' . self::$nimSequence . '/SV/' . rand(1000, 9999),
+            'nama' => 'Mahasiswa Test ' . self::$nimSequence,
             'angkatan' => 2024
         ]);
     }
