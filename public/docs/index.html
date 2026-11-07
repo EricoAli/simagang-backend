@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dokumentasi API SIMAGANG DTEDI (Admin & Super Admin)</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --sidebar-bg: #0f172a;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+      --code-bg: #090d16;
+      --badge-get: #0284c7;
+      --badge-post: #16a34a;
+      --badge-put: #ea580c;
+      --badge-patch: #9333ea;
+      --badge-delete: #dc2626;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* Sidebar */
+    #sidebar {
+      width: 320px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
+      z-index: 50;
+    }
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-header h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 4px;
+    }
+    .sidebar-header p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .search-box {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .search-box input {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.85rem;
+      outline: none;
+    }
+    .search-box input:focus {
+      border-color: var(--primary);
+    }
+    .sidebar-menu {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 10px;
+    }
+    .menu-group-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 10px 10px 4px;
+      font-weight: 700;
+    }
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.83rem;
+      transition: background 0.15s;
+    }
+    .menu-item:hover {
+      background: var(--card-bg);
+    }
+    .badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #fff;
+      min-width: 45px;
+      text-align: center;
+    }
+    .badge-get { background: var(--badge-get); }
+    .badge-post { background: var(--badge-post); }
+    .badge-put { background: var(--badge-put); }
+    .badge-patch { background: var(--badge-patch); }
+    .badge-delete { background: var(--badge-delete); }
+
+    /* Content */
+    #main {
+      margin-left: 320px;
+      flex: 1;
+      padding: 30px 40px;
+      max-width: 1100px;
+    }
+    .top-banner {
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      margin-bottom: 30px;
+    }
+    .top-banner h1 {
+      font-size: 1.7rem;
+      color: #38bdf8;
+      margin-bottom: 8px;
+    }
+    .top-banner p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .meta-badges {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .meta-chip {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.78rem;
+      color: #cbd5e1;
+    }
+
+    /* Section & Cards */
+    .section-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin: 36px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .api-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 20px;
+      overflow: hidden;
+      scroll-margin-top: 20px;
+    }
+    .api-card-header {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .api-card-header .endpoint-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .api-card-header .route-path {
+      font-family: monospace;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    .api-card-header .route-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .api-card-body {
+      padding: 18px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px 12px;
+      font-size: 0.85rem;
+      margin-bottom: 14px;
+    }
+    .info-label {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .info-value {
+      color: #e2e8f0;
+    }
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: Consolas, monospace;
+      font-size: 0.82rem;
+      color: #38bdf8;
+      overflow-x: auto;
+      margin-top: 6px;
+      white-space: pre;
+    }
+    .response-tabs {
+      margin-top: 14px;
+    }
+    .response-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+    }
+    .res-200 { background: #065f46; color: #34d399; }
+    .res-201 { background: #065f46; color: #6ee7b7; }
+    .res-403 { background: #7f1d1d; color: #fca5a5; }
+    .res-422 { background: #78350f; color: #fcd34d; }
+
+    /* Security callout */
+    .security-note {
+      background: rgba(220, 38, 38, 0.1);
+      border-left: 3px solid #ef4444;
+      padding: 10px 14px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.82rem;
+      color: #fca5a5;
+      margin-top: 12px;
+    }
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      font-weight: 600;
+      transition: background 0.15s;
+    }
+    .action-btn:hover {
+      background: var(--primary-dark);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h2>SIMAGANG API</h2>
+      <p>Modul Admin & Super Admin</p>
+    </div>
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="Cari endpoint..." onkeyup="filterEndpoints()">
+    </div>
+    <nav class="sidebar-menu">
+      <div class="menu-group-title">Autentikasi</div>
+      <a class="menu-item" href="#login-super-admin"><span class="badge badge-post">POST</span> Login Super Admin</a>
+      <a class="menu-item" href="#login-admin-trpl"><span class="badge badge-post">POST</span> Login Admin TRPL</a>
+      <a class="menu-item" href="#login-admin-trik"><span class="badge badge-post">POST</span> Login Admin TRIK</a>
+      <a class="menu-item" href="#logout"><span class="badge badge-post">POST</span> Logout</a>
+
+      <div class="menu-group-title">Super Admin</div>
+      <a class="menu-item" href="#list-admin-prodi"><span class="badge badge-get">GET</span> List Admin Prodi</a>
+      <a class="menu-item" href="#create-admin-prodi"><span class="badge badge-post">POST</span> Buat Admin Prodi</a>
+      <a class="menu-item" href="#detail-admin-prodi"><span class="badge badge-get">GET</span> Detail Admin Prodi</a>
+      <a class="menu-item" href="#update-admin-prodi"><span class="badge badge-put">PUT</span> Update Admin Prodi</a>
+      <a class="menu-item" href="#status-admin-prodi"><span class="badge badge-patch">PATCH</span> Status Admin Prodi</a>
+      <a class="menu-item" href="#dashboard-super-admin"><span class="badge badge-get">GET</span> Dashboard Agregat</a>
+      <a class="menu-item" href="#dashboard-filter-prodi"><span class="badge badge-get">GET</span> Dashboard Filter</a>
+
+      <div class="menu-group-title">Admin Prodi: Dashboard</div>
+      <a class="menu-item" href="#dashboard-admin"><span class="badge badge-get">GET</span> Dashboard Terisolasi</a>
+
+      <div class="menu-group-title">Admin: Manajemen Mahasiswa</div>
+      <a class="menu-item" href="#list-mahasiswa"><span class="badge badge-get">GET</span> List Mahasiswa</a>
+      <a class="menu-item" href="#create-mahasiswa"><span class="badge badge-post">POST</span> Tambah Mahasiswa</a>
+      <a class="menu-item" href="#detail-mahasiswa"><span class="badge badge-get">GET</span> Detail Mahasiswa</a>
+      <a class="menu-item" href="#update-mahasiswa"><span class="badge badge-post">POST</span> Update Mahasiswa</a>
+      <a class="menu-item" href="#delete-mahasiswa"><span class="badge badge-delete">DEL</span> Hapus Mahasiswa</a>
+      <a class="menu-item" href="#cross-prodi-mahasiswa"><span class="badge badge-get">GET</span> Uji Lintas Prodi 403</a>
+
+      <div class="menu-group-title">Admin: Dosen Pembimbing</div>
+      <a class="menu-item" href="#list-dosbing"><span class="badge badge-get">GET</span> List Dosbing</a>
+      <a class="menu-item" href="#create-dosbing"><span class="badge badge-post">POST</span> Tambah Dosbing</a>
+      <a class="menu-item" href="#detail-dosbing"><span class="badge badge-get">GET</span> Detail Dosbing</a>
+      <a class="menu-item" href="#update-dosbing"><span class="badge badge-put">PUT</span> Update Dosbing</a>
+      <a class="menu-item" href="#jumlah-dosbing"><span class="badge badge-get">GET</span> Jumlah Dosbing</a>
+      <a class="menu-item" href="#delete-dosbing"><span class="badge badge-delete">DEL</span> Hapus Dosbing</a>
+
+      <div class="menu-group-title">Admin: Mitra</div>
+      <a class="menu-item" href="#list-mitra"><span class="badge badge-get">GET</span> List Mitra</a>
+      <a class="menu-item" href="#create-mitra"><span class="badge badge-post">POST</span> Tambah Mitra</a>
+      <a class="menu-item" href="#update-mitra"><span class="badge badge-put">PUT</span> Update Mitra</a>
+      <a class="menu-item" href="#jumlah-mitra"><span class="badge badge-get">GET</span> Jumlah Mitra</a>
+      <a class="menu-item" href="#delete-mitra"><span class="badge badge-delete">DEL</span> Hapus Mitra</a>
+
+      <div class="menu-group-title">Admin: Magang</div>
+      <a class="menu-item" href="#list-magang"><span class="badge badge-get">GET</span> List Magang</a>
+      <a class="menu-item" href="#detail-magang"><span class="badge badge-get">GET</span> Detail Magang</a>
+      <a class="menu-item" href="#detail-lengkap-magang"><span class="badge badge-get">GET</span> Detail Lengkap</a>
+      <a class="menu-item" href="#update-magang"><span class="badge badge-put">PUT</span> Update Status Magang</a>
+      <a class="menu-item" href="#delete-magang"><span class="badge badge-delete">DEL</span> Hapus Magang</a>
+      <a class="menu-item" href="#export-excel-magang"><span class="badge badge-get">GET</span> Export Excel</a>
+
+      <div class="menu-group-title">Admin: Jadwal Presentasi PI</div>
+      <a class="menu-item" href="#list-jadwal"><span class="badge badge-get">GET</span> List Jadwal</a>
+      <a class="menu-item" href="#create-jadwal"><span class="badge badge-post">POST</span> Buat Jadwal</a>
+      <a class="menu-item" href="#detail-jadwal"><span class="badge badge-get">GET</span> Detail Jadwal</a>
+      <a class="menu-item" href="#update-jadwal"><span class="badge badge-put">PUT</span> Update Jadwal</a>
+      <a class="menu-item" href="#delete-jadwal"><span class="badge badge-delete">DEL</span> Hapus Jadwal</a>
+      <a class="menu-item" href="#cross-prodi-jadwal"><span class="badge badge-post">POST</span> Uji Lintas Prodi 403</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main id="main">
+    <div class="top-banner">
+      <h1>SIMAGANG DTEDI API Documentation</h1>
+      <p>Dokumentasi resmi untuk modul <strong>Super Admin</strong> dan <strong>Admin Program Studi</strong> (TRPL, TRIK, TRI, TRE). Berfokus pada otorisasi multi-prodi, manajemen akun pengelola, master data, monitoring magang, dan presentasi proyek industri.</p>
+      <div class="meta-badges">
+        <span class="meta-chip">🚀 Base URL: <code>http://127.0.0.1:8000/api</code></span>
+        <span class="meta-chip">🔒 Auth: Laravel Sanctum Bearer Token</span>
+        <span class="meta-chip">🛡️ Multi-Prodi: TRPL (1), TRIK (2), TRI (3), TRE (4)</span>
+        <a class="action-btn" href="/postman/SIMAGANG.postman_collection.json" download>⬇️ Unduh Koleksi Postman JSON</a>
+      </div>
+    </div>
+
+    <!-- Section: Auth -->
+    <div class="section-title">00. Autentikasi</div>
+
+    <div class="api-card" id="login-super-admin">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/auth/login (Super Admin)</span>
+        </div>
+        <span class="route-desc">Login Super Admin</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Header:</span>
+          <span class="info-value"><code>Content-Type: application/json</code></span>
+          <span class="info-label">Body:</span>
+          <div class="code-block">{
+  "username": "superadmin",
+  "password": "SuperAdminPassword123!"
+}</div>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-200">200 OK</span>
+          <div class="code-block">{
+  "access_token": "3|B18FRcPK8sWZSZSiYBVCWr1wksIRXQTtp9gghcO71996d805",
+  "role": "super_admin",
+  "user": {
+    "user_id": 59,
+    "username": "superadmin",
+    "role": "super_admin",
+    "is_active": true
+  },
+  "token_type": "Bearer",
+  "expires_at": "2026-10-12T18:52:15.952303Z"
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="login-admin-trpl">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/auth/login (Admin TRPL)</span>
+        </div>
+        <span class="route-desc">Login Admin Prodi TRPL</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Body:</span>
+          <div class="code-block">{
+  "username": "admin_trpl",
+  "password": "GANTI_DENGAN_PASSWORD_KUAT"
+}</div>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-200">200 OK</span>
+          <div class="code-block">{
+  "access_token": "4|jyNbO7x6XDSei24BNUV3J7l6c0asYafdxdvDNMKLfc4d282d",
+  "role": "admin",
+  "user": {
+    "user_id": 62,
+    "username": "admin_trpl",
+    "admin": {
+      "admin_id": 25,
+      "prodi_id": 1,
+      "nama": "Admin Prodi TRPL"
+    }
+  }
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Super Admin -->
+    <div class="section-title">01. Super Admin: Manajemen Admin Prodi</div>
+
+    <div class="api-card" id="list-admin-prodi">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-get">GET</span>
+          <span class="route-path">/api/super-admin/admin-prodi</span>
+        </div>
+        <span class="route-desc">Daftar Admin Prodi</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>super_admin</code></span>
+          <span class="info-label">Query Params:</span>
+          <span class="info-value"><code>prodi_id</code> (optional), <code>is_active</code> (optional), <code>q</code> (search)</span>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-200">200 OK</span>
+          <div class="code-block">{
+  "current_page": 1,
+  "data": [
+    {
+      "admin_id": 25,
+      "nama": "Admin Prodi TRPL",
+      "prodi_id": 1,
+      "user": { "username": "admin_trpl", "is_active": true },
+      "prodi": { "kode_prodi": "TRPL", "nama_prodi": "Teknologi Rekayasa Perangkat Lunak" }
+    }
+  ]
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="create-admin-prodi">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/super-admin/admin-prodi</span>
+        </div>
+        <span class="route-desc">Buat Akun Admin Prodi Baru</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>super_admin</code></span>
+          <span class="info-label">Body:</span>
+          <div class="code-block">{
+  "username": "admin_tri",
+  "email": "admin.tri@simagang.dev",
+  "password": "AdminTRIpassword!2026",
+  "nama": "Admin Prodi TRI",
+  "prodi_id": 3
+}</div>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-201">201 Created</span>
+          <div class="code-block">{
+  "message": "Akun Admin Prodi berhasil dibuat",
+  "data": {
+    "admin_id": 23,
+    "user_id": 60,
+    "prodi_id": 3,
+    "nama": "Admin Prodi TRI"
+  }
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="status-admin-prodi">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-patch">PATCH</span>
+          <span class="route-path">/api/super-admin/admin-prodi/{id}/status</span>
+        </div>
+        <span class="route-desc">Nonaktifkan / Aktifkan Admin Prodi</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>super_admin</code></span>
+          <span class="info-label">Body:</span>
+          <div class="code-block">{ "is_active": false }</div>
+        </div>
+        <div class="security-note">
+          Saat <code>is_active: false</code>, seluruh token aktif user ini dicabut otomatis oleh sistem dan request login berikutnya ditolak dengan 403 Forbidden.
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="dashboard-super-admin">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-get">GET</span>
+          <span class="route-path">/api/super-admin/dashboard</span>
+        </div>
+        <span class="route-desc">Dashboard Agregat Seluruh Prodi</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>super_admin</code></span>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-200">200 OK</span>
+          <div class="code-block">{
+  "mode": "agregat",
+  "statistik_keseluruhan": {
+    "total_mahasiswa": 120,
+    "total_mahasiswa_aktif_magang": 85,
+    "total_admin_prodi": 4,
+    "total_mitra": 25,
+    "total_dosbing": 18
+  },
+  "breakdown_per_prodi": [
+    { "prodi_id": 1, "kode_prodi": "TRPL", "jumlah_mahasiswa": 45 },
+    { "prodi_id": 2, "kode_prodi": "TRIK", "jumlah_mahasiswa": 30 },
+    { "prodi_id": 3, "kode_prodi": "TRI", "jumlah_mahasiswa": 25 },
+    { "prodi_id": 4, "kode_prodi": "TRE", "jumlah_mahasiswa": 20 }
+  ]
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Admin Prodi Dashboard -->
+    <div class="section-title">02. Admin Prodi: Dashboard Terisolasi</div>
+
+    <div class="api-card" id="dashboard-admin">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-get">GET</span>
+          <span class="route-path">/api/dashboard/admin</span>
+        </div>
+        <span class="route-desc">Dashboard Metrik Khusus Prodi Admin</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>admin</code></span>
+        </div>
+        <div class="security-note">
+          Metrik <code>jumlah_mahasiswa</code> dan <code>jumlah_mahasiswa_aktif_magang</code> hanya menghitung data dari prodi admin yang sedang login.
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Admin Manajemen Mahasiswa -->
+    <div class="section-title">03. Admin Prodi: Manajemen Mahasiswa</div>
+
+    <div class="api-card" id="list-mahasiswa">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-get">GET</span>
+          <span class="route-path">/api/mahasiswa</span>
+        </div>
+        <span class="route-desc">List Mahasiswa (Isolasi Prodi)</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>admin</code></span>
+        </div>
+        <div class="security-note">
+          Admin TRPL hanya akan melihat daftar mahasiswa dengan <code>prodi_id: 1</code>. Mahasiswa dari TRIK, TRI, TRE tidak muncul.
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="create-mahasiswa">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/mahasiswa</span>
+        </div>
+        <span class="route-desc">Tambah Mahasiswa Baru</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>admin</code></span>
+          <span class="info-label">Body:</span>
+          <div class="code-block">{
+  "nim": "24/500001/SV/10001",
+  "nama": "Mahasiswa Uji TRPL",
+  "angkatan": "2024"
+}</div>
+        </div>
+        <div class="security-note">
+          Nilai <code>prodi_id</code> otomatis diambil dari profil admin yang sedang login. Jika klien menyertakan <code>prodi_id</code> lain di payload, sistem otomatis mengabaikannya.
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="cross-prodi-mahasiswa">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-get">GET</span>
+          <span class="route-path">/api/mahasiswa/{id} (Uji Lintas Prodi)</span>
+        </div>
+        <span class="route-desc">Proteksi IDOR Mahasiswa</span>
+      </div>
+      <div class="api-card-body">
+        <div class="response-tabs">
+          <span class="response-badge res-403">403 Forbidden</span>
+          <div class="code-block">{
+  "message": "Unauthorized. Mahasiswa bukan dari prodi anda."
+}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: Admin Jadwal Presentasi PI -->
+    <div class="section-title">04. Admin Prodi: Manajemen Jadwal Presentasi PI</div>
+
+    <div class="api-card" id="create-jadwal">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/jadwal-presentasi</span>
+        </div>
+        <span class="route-desc">Buat Jadwal Presentasi Mahasiswa</span>
+      </div>
+      <div class="api-card-body">
+        <div class="info-grid">
+          <span class="info-label">Role:</span>
+          <span class="info-value"><code>admin</code> / <code>super_admin</code></span>
+          <span class="info-label">Body:</span>
+          <div class="code-block">{
+  "magang_id": 1,
+  "tanggal_presentasi": "2026-11-20",
+  "waktu_mulai": "09:00",
+  "waktu_selesai": "10:30",
+  "ruangan": "Lab Software 201",
+  "tempat": "Gedung TILC SV UGM",
+  "keterangan": "Presentasi Akhir Proyek Industri",
+  "status": "terjadwal"
+}</div>
+        </div>
+        <div class="response-tabs">
+          <span class="response-badge res-201">201 Created</span>
+        </div>
+        <div class="security-note">
+          Admin prodi hanya dapat menjadwalkan mahasiswa dari prodinya sendiri. Jika <code>magang_id</code> merujuk pada mahasiswa prodi lain, server menolak dengan HTTP 403 Forbidden.
+        </div>
+      </div>
+    </div>
+
+    <div class="api-card" id="cross-prodi-jadwal">
+      <div class="api-card-header">
+        <div class="endpoint-info">
+          <span class="badge badge-post">POST</span>
+          <span class="route-path">/api/jadwal-presentasi (Tolak Lintas Prodi)</span>
+        </div>
+        <span class="route-desc">Uji Penolakan Jadwal Mahasiswa Prodi Lain</span>
+      </div>
+      <div class="api-card-body">
+        <div class="response-tabs">
+          <span class="response-badge res-403">403 Forbidden</span>
+          <div class="code-block">{
+  "message": "Unauthorized. Mahasiswa magang bukan dari prodi anda."
+}</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function filterEndpoints() {
+      const q = document.getElementById('searchInput').value.toLowerCase();
+      const menuItems = document.querySelectorAll('.menu-item');
+      menuItems.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        item.style.display = text.includes(q) ? 'flex' : 'none';
+      });
+    }
+  </script>
+</body>
+</html>
