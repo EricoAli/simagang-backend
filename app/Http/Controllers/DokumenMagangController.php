@@ -22,16 +22,38 @@ class DokumenMagangController extends Controller
 
         $query = DokumenMagang::with('magang:magang_id,mahasiswa_id,semester_magang');
 
-        // 🔐 Filter otomatis untuk role mahasiswa
-        if ($user && $user->mahasiswa) {
-            // Jika user adalah mahasiswa, filter berdasarkan mahasiswa_id mereka
-            $mahasiswaId = $user->mahasiswa->mahasiswa_id;
-
-            $query->whereHas('magang', function ($q) use ($mahasiswaId) {
-                $q->where('mahasiswa_id', $mahasiswaId);
-            });
+        if ($user->role === 'mahasiswa') {
+            $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id;
+            if ($mahasiswaId) {
+                $query->whereHas('magang', function ($q) use ($mahasiswaId) {
+                    $q->where('mahasiswa_id', $mahasiswaId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            if ($prodiId) {
+                $query->whereHas('magang.mahasiswa', function ($q) use ($prodiId) {
+                    $q->where('prodi_id', $prodiId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if ($mitraId) {
+                $query->whereHas('magang', function ($q) use ($mitraId) {
+                    $q->where('mitra_id', $mitraId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'dosbing') {
+            return response()->json(['message' => 'Akses dokumen magang untuk dosen pembimbing belum didukung.'], 403);
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
         }
-        // Jika bukan mahasiswa (admin, pembimbing, dll), tampilkan semua dokumen
 
         // Filter berdasarkan magang_id
         if ($magangId = $request->query('magang_id')) {
@@ -51,9 +73,28 @@ class DokumenMagangController extends Controller
     /**
      * Tampilkan detail dokumen.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $dokumen = DokumenMagang::with('magang')->findOrFail($id);
+        $dokumen = DokumenMagang::with('magang.mahasiswa')->findOrFail($id);
+        $user = $request->user();
+
+        if ($user->role === 'mahasiswa') {
+            if ($dokumen->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($dokumen->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari prodi anda.'], 403);
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if (!$mitraId || $dokumen->magang->mitra_id !== $mitraId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari mitra anda.'], 403);
+            }
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
 
         return response()->json($dokumen, 200);
     }
@@ -79,14 +120,28 @@ class DokumenMagangController extends Controller
 
         $data = $validator->validated();
 
-        // Upload file
-        $path = $request->file('file')->store('dokumen_magang', 'public');
+        $magang = Magang::with('mahasiswa')->findOrFail($data['magang_id']);
+        $user = $request->user();
+
+        if ($user->role === 'mahasiswa') {
+            if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
+            }
+        }
+
+        // Upload file ke storage privat (local)
+        $path = $request->file('file')->store('dokumen_magang', 'local');
 
         $dokumen = DokumenMagang::create([
             'magang_id' => $data['magang_id'],
             'jenis_dokumen' => $data['jenis_dokumen'],
             'nama_file' => $request->file('file')->getClientOriginalName(),
-            'path_file' => $path,
+            'file_path' => $path,
             'ukuran_file' => $request->file('file')->getSize(),
             'uploaded_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
@@ -103,7 +158,21 @@ class DokumenMagangController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $dokumen = DokumenMagang::findOrFail($id);
+        $dokumen = DokumenMagang::with('magang.mahasiswa')->findOrFail($id);
+        $user = $request->user();
+
+        if ($user->role === 'mahasiswa') {
+            if ($dokumen->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($dokumen->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari prodi anda.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
 
         $rules = [
             'jenis_dokumen' => ['nullable', 'string', 'max:100'],
@@ -122,13 +191,17 @@ class DokumenMagangController extends Controller
 
         // Jika ada file baru, hapus lama & upload baru
         if ($request->hasFile('file')) {
-            if (!empty($dokumen->path_file) && Storage::disk('public')->exists($dokumen->path_file)) {
-                Storage::disk('public')->delete($dokumen->path_file);
+            if (!empty($dokumen->file_path)) {
+                if (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
+                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                    Storage::disk('public')->delete($dokumen->file_path);
+                }
             }
 
-            $path = $request->file('file')->store('dokumen_magang', 'public');
+            $path = $request->file('file')->store('dokumen_magang', 'local');
             $dokumen->nama_file = $request->file('file')->getClientOriginalName();
-            $dokumen->path_file = $path;
+            $dokumen->file_path = $path;
             $dokumen->ukuran_file = $request->file('file')->getSize();
         }
 
@@ -146,13 +219,31 @@ class DokumenMagangController extends Controller
     /**
      * Hapus dokumen.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $dokumen = DokumenMagang::findOrFail($id);
+        $dokumen = DokumenMagang::with('magang.mahasiswa')->findOrFail($id);
+        $user = $request->user();
 
-        // Hapus file fisik
-        if (!empty($dokumen->path_file) && Storage::disk('public')->exists($dokumen->path_file)) {
-            Storage::disk('public')->delete($dokumen->path_file);
+        if ($user->role === 'mahasiswa') {
+            if ($dokumen->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($dokumen->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari prodi anda.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        // Hapus file fisik (cek disk local lalu fallback public)
+        if (!empty($dokumen->file_path)) {
+            if (Storage::disk('local')->exists($dokumen->file_path)) {
+                Storage::disk('local')->delete($dokumen->file_path);
+            } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                Storage::disk('public')->delete($dokumen->file_path);
+            }
         }
 
         $dokumen->delete();
@@ -164,17 +255,70 @@ class DokumenMagangController extends Controller
 
     public function getDocMagangByMagang(Request $request, $id)
     {
-        // $user = $request->user();
-        // $mahasiswa = $user->mahasiswa;
-        $magang = Magang::findOrFail($id);
+        $magang = Magang::with('mahasiswa')->findOrFail($id);
+        $user = $request->user();
 
-        // if ($user->role === 'mahasiswa' && $mahasiswa->mahasiswa_id !== $magang->mahasiswa_id) {
-        //     abort(403, 'Access denied.');
-        // }
+        if ($user->role === 'mahasiswa') {
+            if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if (!$mitraId || $magang->mitra_id !== $mitraId) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
 
         $documents = DokumenMagang::where('magang_id', $magang->magang_id)->get();
         return response()->json(['dokumen' => $documents], 200);
+    }
 
+    /**
+     * Unduh file fisik dokumen magang secara terotorisasi.
+     */
+    public function download(Request $request, $id)
+    {
+        $dokumen = DokumenMagang::with('magang.mahasiswa')->findOrFail($id);
+        $user = $request->user();
 
+        if ($user->role === 'mahasiswa') {
+            if ($dokumen->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($dokumen->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari prodi anda.'], 403);
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if (!$mitraId || $dokumen->magang->mitra_id !== $mitraId) {
+                return response()->json(['message' => 'Unauthorized. Dokumen bukan dari mitra anda.'], 403);
+            }
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $disk = null;
+        if (!empty($dokumen->file_path)) {
+            if (Storage::disk('local')->exists($dokumen->file_path)) {
+                $disk = 'local';
+            } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                $disk = 'public';
+            }
+        }
+
+        if (!$disk) {
+            return response()->json(['message' => 'File fisik tidak ditemukan di storage.'], 404);
+        }
+
+        return Storage::disk($disk)->download($dokumen->file_path, $dokumen->nama_file);
     }
 }

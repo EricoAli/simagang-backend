@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Dosbing;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use App\Models\Magang;
@@ -73,8 +74,9 @@ class DosbingController extends Controller
             ], 201);
 
         } catch (\Throwable $th) {
+            Log::error('DosbingController@store error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan pada server saat menambahkan dosen pembimbing.',
             ], 500);
         }
     }
@@ -114,8 +116,9 @@ class DosbingController extends Controller
             ], 200);
 
         } catch (\Throwable $th) {
+            Log::error('DosbingController@update error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan pada server saat memperbarui dosen pembimbing.',
             ], 500);
         }
     }

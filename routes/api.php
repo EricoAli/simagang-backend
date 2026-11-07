@@ -150,6 +150,7 @@ Route::prefix('dokumen-magang')
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
+        Route::get('/{id}/download', 'download');
         Route::post('/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });

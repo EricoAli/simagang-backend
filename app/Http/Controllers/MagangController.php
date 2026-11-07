@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 
@@ -30,10 +31,30 @@ class MagangController extends Controller
 
         $query = Magang::with(['mahasiswa', 'mitra', 'dosenPembimbing']);
 
-        // Filter otomatis jika role adalah mahasiswmahasiswaIda
+        // Filter otomatis jika role adalah mahasiswa
         if ($user->role === 'mahasiswa') {
-            // asumsikan user.id terhubung ke mahasiswa.id atau ke field user_id di tabel mahasiswa
-            $query->where('mahasiswa_id', $mahasiswa->mahasiswa_id)->orderBy("created_at");
+            $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id;
+            if ($mahasiswaId) {
+                $query->where('mahasiswa_id', $mahasiswaId)->orderBy("created_at");
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            if ($prodiId) {
+                $query->whereHas('mahasiswa', function ($q) use ($prodiId) {
+                    $q->where('prodi_id', $prodiId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if ($mitraId) {
+                $query->where('mitra_id', $mitraId);
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
         // 🔎 Filter manual berdasarkan query param (admin bisa gunakan ini)
@@ -65,37 +86,44 @@ class MagangController extends Controller
         // 🔎 Filter status penilaian (nilai mitra)
         if ($penilaian = $request->query('penilaian')) {
             $user = $request->user();
-            $mitra_id = $user->mitra->mitra_id;
+            $mitra_id = optional($user->mitra)->mitra_id;
             if ($penilaian === 'none') {
-                // Magang yang BELUM ada penilaian mitra
                 $query->whereDoesntHave('penilaianMitra')
                     ->where('mitra_id', $mitra_id);
             } elseif ($penilaian === 'exist') {
-                // Magang yang SUDAH ada penilaian mitra
                 $query->whereHas('penilaianMitra')
                     ->where('mitra_id', $mitra_id);
             }
         }
 
-
         $perPage = (int) $request->query('per_page', 10);
         $magang = $query->paginate($perPage);
-        // $magang = $query->get();
-
-        // return response()->json([$user, $mahasiswa], 200);
-
-
 
         return response()->json($magang, 200);
     }
 
-
     /**
      * Tampilkan detail magang berdasarkan id (magang_id).
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $magang = Magang::with(['mahasiswa', 'mitra', 'dosenPembimbing'])->findOrFail($id);
+
+        $user = $request->user();
+        if ($user->role === 'mahasiswa') {
+            if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Data magang bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
+            }
+        } elseif ($user->role === 'mitra') {
+            if ($magang->mitra_id !== optional($user->mitra)->mitra_id) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan di mitra anda.'], 403);
+            }
+        }
 
         return response()->json($magang, 200);
     }
@@ -106,6 +134,10 @@ class MagangController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+        if ($user->role !== 'mahasiswa' || !$user->mahasiswa) {
+            return response()->json(['message' => 'Hanya mahasiswa yang dapat mendaftarkan magang'], 403);
+        }
+
         $mahasiswa_id = $user->mahasiswa->mahasiswa_id;
 
         $rules = [
@@ -145,21 +177,21 @@ class MagangController extends Controller
 
         $data['mahasiswa_id'] = $mahasiswa_id;
 
-        // upload penerimaan
+        // upload penerimaan ke private disk
         $filePenerimaan = $request->file('dokumenPenerimaan');
         $namePenerimaan = $filePenerimaan->getClientOriginalName();
         $extPenerimaan = $filePenerimaan->getClientOriginalExtension();
         $basePenerimaan = pathinfo($namePenerimaan, PATHINFO_FILENAME);
         $fileNamePenerimaan = $basePenerimaan . "_" . time() . "." . $extPenerimaan;
-        $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'public');
+        $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'local');
 
-        // upload pra KRS
+        // upload pra KRS ke private disk
         $filePraKrs = $request->file('dokumenPraKRS');
         $namaPraKRS = $filePraKrs->getClientOriginalName();
         $extPraKRS = $filePraKrs->getClientOriginalExtension();
         $basePraKRS = pathinfo($namaPraKRS, PATHINFO_FILENAME);
         $fileNamePraKRS = $basePraKRS . "_" . time() . "." . $extPraKRS;
-        $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'public');
+        $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'local');
 
         // create magang dulu
         unset($data['dokumenPenerimaan'], $data['dokumenPraKRS']);
@@ -194,7 +226,21 @@ class MagangController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $magang = Magang::with('dokumenMagang')->findOrFail($id);
+        $magang = Magang::with(['dokumenMagang', 'mahasiswa'])->findOrFail($id);
+
+        $user = $request->user();
+        if ($user->role === 'mahasiswa') {
+            if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Data magang bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized. Role tidak diizinkan mengubah data magang.'], 403);
+        }
 
         $rules = [
             'mahasiswa_id' => ['sometimes', 'exists:mahasiswa,mahasiswa_id'],
@@ -229,12 +275,16 @@ class MagangController extends Controller
             $extPenerimaan = $filePenerimaan->getClientOriginalExtension();
             $basePenerimaan = pathinfo($namePenerimaan, PATHINFO_FILENAME);
             $fileNamePenerimaan = $basePenerimaan . "_" . time() . "." . $extPenerimaan;
-            $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'public');
+            $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'local');
 
             $dokumen = $magang->dokumenMagang()->where('jenis_dokumen', 'doc_surat_penerimaan')->first();
 
-            if ($dokumen && Storage::disk('public')->exists($dokumen->file_path)) {
-                Storage::disk('public')->delete($dokumen->file_path);
+            if ($dokumen && !empty($dokumen->file_path)) {
+                if (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
+                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                    Storage::disk('public')->delete($dokumen->file_path);
+                }
             }
 
             $magang->dokumenMagang()->updateOrCreate(
@@ -254,12 +304,16 @@ class MagangController extends Controller
             $extPraKRS = $filePraKrs->getClientOriginalExtension();
             $basePraKRS = pathinfo($namaPraKRS, PATHINFO_FILENAME);
             $fileNamePraKRS = $basePraKRS . "_" . time() . "." . $extPraKRS;
-            $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'public');
+            $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'local');
 
             $dokumen = $magang->dokumenMagang()->where('jenis_dokumen', 'doc_pra_krs')->first();
 
-            if ($dokumen && Storage::disk('public')->exists($dokumen->file_path)) {
-                Storage::disk('public')->delete($dokumen->file_path);
+            if ($dokumen && !empty($dokumen->file_path)) {
+                if (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
+                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                    Storage::disk('public')->delete($dokumen->file_path);
+                }
             }
 
             $magang->dokumenMagang()->updateOrCreate(
@@ -286,14 +340,26 @@ class MagangController extends Controller
     /**
      * Hapus data magang.
      */
-
-
-    // Controller - bersih
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         try {
-            DB::transaction(function () use ($id) {
-                $magang = Magang::findOrFail($id);
+            $magang = Magang::with('mahasiswa')->findOrFail($id);
+
+            $user = $request->user();
+            if ($user->role === 'mahasiswa') {
+                if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                    return response()->json(['message' => 'Unauthorized. Data magang bukan milik anda.'], 403);
+                }
+            } elseif ($user->role === 'admin') {
+                $adminProdiId = optional($user->admin)->prodi_id;
+                if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                    return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
+                }
+            } else {
+                return response()->json(['message' => 'Unauthorized. Role tidak diizinkan menghapus data magang.'], 403);
+            }
+
+            DB::transaction(function () use ($magang) {
                 $magang->delete();
             });
 
@@ -302,16 +368,33 @@ class MagangController extends Controller
             ], 200);
 
         } catch (\Throwable $th) {
+            Log::error('MagangController@destroy error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan pada server saat menghapus data magang.',
             ], 500);
         }
     }
 
-    public function showDetail($id)
+    public function showDetail(Request $request, $id)
     {
         $magang = Magang::with(['mahasiswa', 'mitra', 'dosenPembimbing'])
             ->findOrFail($id);
+
+        $user = $request->user();
+        if ($user->role === 'mahasiswa') {
+            if ($magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Data magang bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
+            }
+        } elseif ($user->role === 'mitra') {
+            if ($magang->mitra_id !== optional($user->mitra)->mitra_id) {
+                return response()->json(['message' => 'Unauthorized. Magang bukan di mitra anda.'], 403);
+            }
+        }
 
         // Logbook
         $logbook = Logbook::with('fotoKegiatan')

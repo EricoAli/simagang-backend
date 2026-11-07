@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 use App\Models\Mahasiswa;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -172,8 +173,9 @@ class MahasiswaController extends Controller
             ], 201);
 
         } catch (\Exception $e) {
+            Log::error('MahasiswaController@store error: ' . $e->getMessage(), ['exception' => $e]);
             return response()->json([
-                'message' => $e->getMessage()
+                'message' => 'Terjadi kesalahan pada server saat menambahkan data mahasiswa.'
             ], 500);
         }
     }
@@ -229,8 +231,9 @@ class MahasiswaController extends Controller
             ], 200);
             
         } catch (\Throwable $th) {
+            Log::error('MahasiswaController@update error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan pada server saat memperbarui data mahasiswa.',
             ], 500);
         }
     }
@@ -260,8 +263,9 @@ class MahasiswaController extends Controller
             ], 200);
             
         } catch (\Throwable $th) {
+            Log::error('MahasiswaController@destroy error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan pada server saat menghapus data mahasiswa.',
             ], 500);
         }
     }
@@ -411,10 +415,10 @@ class MahasiswaController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
             fclose($handle);
+            Log::error('MahasiswaController@import error: ' . $e->getMessage(), ['exception' => $e]);
 
             return response()->json([
-                'message' => 'Terjadi kesalahan saat import',
-                'error' => $e->getMessage()
+                'message' => 'Terjadi kesalahan pada server saat import data mahasiswa.'
             ], 500);
         }
     }

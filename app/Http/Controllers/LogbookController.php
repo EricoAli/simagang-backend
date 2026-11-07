@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FotoMagang;
 use App\Models\Logbook;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -21,18 +22,40 @@ class LogbookController extends Controller
     {
         $query = Logbook::with(['fotoKegiatan', 'magang:magang_id,mahasiswa_id,semester_magang']);
 
-        // 🔐 Filter otomatis untuk role mahasiswa
-        $user = auth()->user();
+        $user = $request->user();
 
-        if ($user && $user->mahasiswa) {
-            // Jika user adalah mahasiswa, filter berdasarkan mahasiswa_id mereka
-            $mahasiswaId = $user->mahasiswa->mahasiswa_id;
-
-            $query->whereHas('magang', function ($q) use ($mahasiswaId) {
-                $q->where('mahasiswa_id', $mahasiswaId);
-            });
+        if ($user->role === 'mahasiswa') {
+            $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id;
+            if ($mahasiswaId) {
+                $query->whereHas('magang', function ($q) use ($mahasiswaId) {
+                    $q->where('mahasiswa_id', $mahasiswaId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            if ($prodiId) {
+                $query->whereHas('magang.mahasiswa', function ($q) use ($prodiId) {
+                    $q->where('prodi_id', $prodiId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if ($mitraId) {
+                $query->whereHas('magang', function ($q) use ($mitraId) {
+                    $q->where('mitra_id', $mitraId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
+        } elseif ($user->role === 'dosbing') {
+            return response()->json(['message' => 'Akses logbook untuk dosen pembimbing belum didukung.'], 403);
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
         }
-        // Jika bukan mahasiswa (admin, pembimbing, dll), tampilkan semua logbook
 
         // 🔎 Filter berdasarkan magang_id (opsional)
         if ($magangId = $request->query('magang_id')) {
@@ -47,16 +70,30 @@ class LogbookController extends Controller
     /**
      * Tampilkan detail logbook berdasarkan id.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         try {
-            $logbook = Logbook::with(['fotoKegiatan', 'magang'])->where('logbook_id', $id)->first();
-
+            $logbook = Logbook::with(['fotoKegiatan', 'magang.mahasiswa'])->where('logbook_id', $id)->first();
 
             if (!$logbook) {
-                return response()->json(['message' => 'Logbook tidak ditemukan'], 500);
+                return response()->json(['message' => 'Logbook tidak ditemukan'], 404);
             }
 
+            $user = $request->user();
+            if ($user->role === 'mahasiswa') {
+                if ($logbook->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                    return response()->json(['message' => 'Unauthorized. Logbook bukan milik anda.'], 403);
+                }
+            } elseif ($user->role === 'admin') {
+                $adminProdiId = optional($user->admin)->prodi_id;
+                if (optional($logbook->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                    return response()->json(['message' => 'Unauthorized. Logbook bukan dari prodi anda.'], 403);
+                }
+            } elseif ($user->role === 'mitra') {
+                if ($logbook->magang->mitra_id !== optional($user->mitra)->mitra_id) {
+                    return response()->json(['message' => 'Unauthorized. Logbook bukan di mitra anda.'], 403);
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -96,6 +133,16 @@ class LogbookController extends Controller
                 'message' => 'Validasi gagal',
                 'errors' => $validator->errors(),
             ], 422);
+        }
+
+        $user = $request->user();
+        if ($user->role !== 'mahasiswa' || !$user->mahasiswa) {
+            return response()->json(['message' => 'Hanya mahasiswa yang dapat mengisi logbook'], 403);
+        }
+
+        $magang = Magang::findOrFail($request->magang_id);
+        if ($magang->mahasiswa_id !== $user->mahasiswa->mahasiswa_id) {
+            return response()->json(['message' => 'Unauthorized. Magang bukan milik anda.'], 403);
         }
 
         DB::beginTransaction();
@@ -139,9 +186,10 @@ class LogbookController extends Controller
                 Storage::disk('public')->deleteDirectory("foto_kegiatan/{$request->magang_id}");
             }
 
+            Log::error('LogbookController@store error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menyimpan logbook: ' . $th->getMessage()
+                'message' => 'Terjadi kesalahan pada server saat menyimpan logbook.'
             ], 500);
         }
 
@@ -152,6 +200,22 @@ class LogbookController extends Controller
      */
     public function update(Request $request, $logbook_id)
     {
+        $logbook = Logbook::with('magang.mahasiswa')->findOrFail($logbook_id);
+
+        $user = $request->user();
+        if ($user->role === 'mahasiswa') {
+            if ($logbook->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Logbook bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($logbook->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Logbook bukan dari prodi anda.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized. Role tidak diizinkan mengubah logbook.'], 403);
+        }
+
         // Validasi
         $validator = Validator::make($request->all(), [
             'kegiatan' => 'required|string',
@@ -172,7 +236,6 @@ class LogbookController extends Controller
         DB::beginTransaction();
 
         try {
-            $logbook = Logbook::findOrFail($logbook_id);
             $magang_id = $logbook->magang_id;
 
             // Update kegiatan
@@ -246,9 +309,10 @@ class LogbookController extends Controller
         } catch (\Exception $e) {
             DB::rollBack();
 
+            Log::error('LogbookController@update error: ' . $e->getMessage(), ['exception' => $e]);
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal update logbook: ' . $e->getMessage()
+                'message' => 'Terjadi kesalahan pada server saat memperbarui logbook.'
             ], 500);
         }
     }
@@ -256,13 +320,27 @@ class LogbookController extends Controller
     /**
      * Hapus logbook.
      */
-    public function destroy($logbook_id)
+    public function destroy(Request $request, $logbook_id)
     {
+        $logbook = Logbook::with('magang.mahasiswa')->findOrFail($logbook_id);
+
+        $user = $request->user();
+        if ($user->role === 'mahasiswa') {
+            if ($logbook->magang->mahasiswa_id !== optional($user->mahasiswa)->mahasiswa_id) {
+                return response()->json(['message' => 'Unauthorized. Logbook bukan milik anda.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $adminProdiId = optional($user->admin)->prodi_id;
+            if (optional($logbook->magang->mahasiswa)->prodi_id !== $adminProdiId) {
+                return response()->json(['message' => 'Unauthorized. Logbook bukan dari prodi anda.'], 403);
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized. Role tidak diizinkan menghapus logbook.'], 403);
+        }
+
         DB::beginTransaction();
 
         try {
-            $logbook = Logbook::findOrFail($logbook_id);
-
             $fotoKegiatan = FotoMagang::where('logbook_id', $logbook_id)->get();
 
             foreach ($fotoKegiatan as $foto) {
@@ -285,9 +363,10 @@ class LogbookController extends Controller
         } catch (\Throwable $th) {
             DB::rollBack();
 
+            Log::error('LogbookController@destroy error: ' . $th->getMessage(), ['exception' => $th]);
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus logbook: ' . $th->getMessage()
+                'message' => 'Terjadi kesalahan pada server saat menghapus logbook.'
             ], 500);
         }
     }

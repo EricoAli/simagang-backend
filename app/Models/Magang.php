@@ -61,13 +61,21 @@ class Magang extends Model
             $magang->load(['dokumenMagang', 'laporan', 'penilaianMitra', 'logbook.fotoKegiatan']);
 
             foreach ($magang->dokumenMagang as $dokumen) {
-                if (Storage::disk('public')->exists($dokumen->file_path)) {
-                    Storage::disk('public')->delete($dokumen->file_path);
+                if (!empty($dokumen->file_path)) {
+                    if (Storage::disk('local')->exists($dokumen->file_path)) {
+                        Storage::disk('local')->delete($dokumen->file_path);
+                    } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                        Storage::disk('public')->delete($dokumen->file_path);
+                    }
                 }
             }
 
             if ($magang->laporan?->file_path) {
-                Storage::disk('public')->delete($magang->laporan->file_path);
+                if (Storage::disk('local')->exists($magang->laporan->file_path)) {
+                    Storage::disk('local')->delete($magang->laporan->file_path);
+                } elseif (Storage::disk('public')->exists($magang->laporan->file_path)) {
+                    Storage::disk('public')->delete($magang->laporan->file_path);
+                }
             }
 
             if ($magang->penilaianMitra?->file_path) {
@@ -118,5 +126,8 @@ class Magang extends Model
         return $this->hasOne(Logbook::class, 'magang_id');
     }
 
-
+    public function jadwalPresentasi()
+    {
+        return $this->hasMany(JadwalPresentasi::class, 'magang_id', 'magang_id');
+    }
 }
