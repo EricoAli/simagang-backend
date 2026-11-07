@@ -89,16 +89,23 @@ Route::prefix('mahasiswa')
 | Mitra Routes
 |--------------------------------------------------------------------------
 */
+// Baca: mahasiswa perlu daftar mitra untuk memilih tempat magang.
 Route::prefix('mitra')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(MitraController::class)->group(function () {
         Route::get('/jumlah', 'jumlahMitra');
-        Route::get('/magang/{id}', 'getMitraByMagang');
+        Route::get('/magang/{id}', 'getMitraByMagang')->whereNumber('id');
         Route::get('/', 'index');
-        Route::post('/', 'store');
         Route::get('/show', 'show');
-        Route::put('/{id}', 'update');
-        Route::delete('/{id}', 'destroy');
+    });
+
+// Kelola master mitra: hanya Admin Prodi & Super Admin.
+Route::prefix('mitra')
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin'])
+    ->controller(MitraController::class)->group(function () {
+        Route::post('/', 'store');
+        Route::put('/{id}', 'update')->whereNumber('id');
+        Route::delete('/{id}', 'destroy')->whereNumber('id');
     });
 
 
