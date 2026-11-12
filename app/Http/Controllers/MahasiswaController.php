@@ -53,11 +53,16 @@ class MahasiswaController extends Controller
             });
         }
 
-        $sortBy = $request->query('sort_by', 'mahasiswa_id');
-        $sortOrder = $request->query('sort_order', 'desc');
+        // Hanya kolom tabel ini yang boleh dipakai untuk sorting; selain itu pakai default.
+        $sortable = ['mahasiswa_id', 'user_id', 'prodi_id', 'nim', 'nama', 'angkatan', 'created_at', 'updated_at'];
+        $sortBy = in_array($request->query('sort_by'), $sortable, true)
+            ? $request->query('sort_by')
+            : 'mahasiswa_id';
+        $sortOrderInput = $request->query('sort_order', 'desc');
+        $sortOrder = is_string($sortOrderInput) && strtolower($sortOrderInput) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = max(1, (int) $request->query('per_page', 10));
         $mahasiswa = $query->paginate($perPage);
 
         return response()->json($mahasiswa, 200);
@@ -110,8 +115,8 @@ class MahasiswaController extends Controller
     public function store(Request $request)
     {
         $rules = [
-            'nim' => ['required', 'string', 'max:50', 'unique:mahasiswa,nim'],
-            'nama' => ['required', 'string', 'max:255'],
+            'nim' => ['required', 'string', 'max:20', 'unique:mahasiswa,nim'],
+            'nama' => ['required', 'string', 'max:100'],
         ];
 
         $messages = [
@@ -186,14 +191,16 @@ class MahasiswaController extends Controller
     {
         $rules = [
             'mahasiswa_id' => ['required', 'integer', 'exists:mahasiswa,mahasiswa_id'],
-            'nim' => ['required', 'string', 'max:50'],
-            'nama' => ['required', 'string', 'max:255'],
+            'nim' => ['required', 'string', 'max:20', Rule::unique('mahasiswa', 'nim')->ignore((int) $request->input('mahasiswa_id'), 'mahasiswa_id')],
+            'nama' => ['required', 'string', 'max:100'],
             'angkatan' => ['nullable', 'integer'],
         ];
 
-        // Validasi NIM uniqueness tapi ignore untuk id ini
+        // NIM harus unik, kecuali NIM milik mahasiswa yang sedang diubah ini.
         
-        $validator = Validator::make($request->all(), $rules);
+        $validator = Validator::make($request->all(), $rules, [
+            'nim.unique' => 'Mahasiswa dengan NIM tersebut telah terdaftar',
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
