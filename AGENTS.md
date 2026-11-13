@@ -125,6 +125,11 @@ In particular:
 - Explain significant schema, authentication, authorization, or API changes
   before implementing them.
 
+## Figma Access Restrictions
+- You are strictly prohibited from performing any write, edit, or create operations in Figma unless I explicitly ask you to.
+- Do NOT invoke write tools such as `send_code_to_figma`, `use_figma`, `create_new_file`, `create_shader`, `generate_diagram`, or `add_code_connect_map`.
+- You are ONLY permitted to use read-only tools: `get_design_context`, `get_screenshot`, and `get_metadata`.
+
 ## Laravel Upgrade Rules
 
 Laravel 11 → 13 is a separate engineering concern from feature development.
