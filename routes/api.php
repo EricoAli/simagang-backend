@@ -89,7 +89,7 @@ Route::prefix('mahasiswa')
 | Mitra Routes
 |--------------------------------------------------------------------------
 */
-// Baca: mahasiswa perlu daftar mitra untuk memilih tempat magang.
+// Baca: mahasiswa perlu daftar mitra untuk memilih tempat magang, mitra lihat/update profil sendiri.
 Route::prefix('mitra')
     ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(MitraController::class)->group(function () {
@@ -97,11 +97,12 @@ Route::prefix('mitra')
         Route::get('/magang/{id}', 'getMitraByMagang')->whereNumber('id');
         Route::get('/', 'index');
         Route::get('/show', 'show');
+        Route::put('/profile', 'updateProfile');
     });
 
-// Kelola master mitra: hanya Admin Prodi & Super Admin.
+// Kelola master mitra: Admin Prodi, Super Admin, dan Mitra (untuk update profil miliknya).
 Route::prefix('mitra')
-    ->middleware(['auth.api:sanctum', 'role:admin,super_admin'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mitra'])
     ->controller(MitraController::class)->group(function () {
         Route::post('/', 'store');
         Route::put('/{id}', 'update')->whereNumber('id');
@@ -115,7 +116,7 @@ Route::prefix('mitra')
 |--------------------------------------------------------------------------
 */
 Route::prefix('magang')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(MagangController::class)->group(function () {
         // Route::get('/aktif/jumlah', 'jumlahMagangAktif');
         Route::get('/', 'index');
@@ -123,8 +124,8 @@ Route::prefix('magang')
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
         Route::get('/{id}/detail', 'showDetail');
-        Route::post('/{id}', 'update');
-        Route::put('/{id}', 'update');
+        Route::match(['put', 'patch', 'post'], '/{id}/status', 'update');
+        Route::match(['put', 'patch', 'post'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
 
@@ -158,7 +159,7 @@ Route::prefix('dokumen-magang')
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
         Route::get('/{id}/download', 'download');
-        Route::post('/{id}', 'update');
+        Route::match(['post', 'put'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
 
@@ -237,13 +238,13 @@ Route::prefix('foto-magang')
 |--------------------------------------------------------------------------
 */
 Route::prefix('penilaian-mitra')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(NilaiMitraController::class)
     ->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
-        Route::put('/{id}', 'update');
+        Route::match(['put', 'post'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
 
@@ -292,7 +293,7 @@ Route::prefix('laporan')
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
         Route::get('/{id}/download', 'download');
-        Route::put('/{id}', 'update');
+        Route::match(['put', 'post'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
 

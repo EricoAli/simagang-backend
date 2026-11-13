@@ -63,10 +63,74 @@ class MitraController extends Controller
     public function show(Request $request)
     {
         $user = $request->user();
-        $mitra_id = optional($user->mitra)->mitra_id;
-        $mitra = Mitra::findOrFail($mitra_id);
+        if ($user->role === 'mitra') {
+            $mitra = $user->mitra;
+            if (!$mitra) {
+                return response()->json(['message' => 'Profil mitra belum terdaftar.'], 404);
+            }
+            return response()->json($mitra, 200);
+        }
+
+        $mitraId = $request->query('mitra_id') ?? optional($user->mitra)->mitra_id;
+        $mitra = Mitra::findOrFail($mitraId);
 
         return response()->json($mitra, 200);
+    }
+
+    /**
+     * Update profil perusahaan untuk mitra yang sedang login.
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+        if ($user->role !== 'mitra' || !$user->mitra) {
+            return response()->json(['message' => 'Hanya akun mitra yang dapat memperbarui profil mitra.'], 403);
+        }
+
+        $mitra = $user->mitra;
+
+        $rules = [
+            'nama_mitra' => ['sometimes', 'required', 'string', 'max:150', Rule::unique('mitra', 'nama_mitra')->ignore($mitra->mitra_id, 'mitra_id')],
+            'email' => [
+                'sometimes',
+                'required',
+                'email',
+                'max:100',
+                Rule::unique('mitra', 'email')->ignore($mitra->mitra_id, 'mitra_id'),
+                Rule::unique('users', 'email')->ignore($mitra->user_id, 'user_id'),
+            ],
+            'narahubung' => ['nullable', 'string', 'max:100'],
+        ];
+
+        $messages = [
+            'nama_mitra.unique' => 'Mitra dengan nama tersebut sudah ada',
+            'email.email' => 'Format email tidak valid',
+            'email.unique' => 'Email sudah pernah dipakai',
+        ];
+
+        $validator = Validator::make($request->all(), $rules, $messages);
+        if ($validator->fails()) {
+            return response()->json([
+                'title' => 'Validasi Gagal',
+                'message' => collect($validator->errors()->all())->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
+        DB::transaction(function () use ($mitra, $user, $data) {
+            if (isset($data['email']) && $data['email'] !== $user->email) {
+                $user->email = $data['email'];
+                $user->save();
+            }
+            $mitra->update($data);
+        });
+
+        return response()->json([
+            'message' => 'Profil perusahaan berhasil diperbarui',
+            'data' => $mitra->fresh(),
+        ], 200);
     }
 
     /**
@@ -74,6 +138,11 @@ class MitraController extends Controller
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        if ($user->role === 'mitra') {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         // Batas panjang mengikuti kolom: mitra.nama_mitra(150), mitra.email(100), mitra.narahubung(100)
         $rules = [
             'nama_mitra' => ['required', 'string', 'max:150', 'unique:mitra,nama_mitra'],
@@ -133,8 +202,15 @@ class MitraController extends Controller
     public function update(Request $request, $id)
     {
         $mitra = Mitra::findOrFail($id);
+        $user = $request->user();
 
-        if ($this->isUsedByOtherProdi($request->user(), $mitra)) {
+        if ($user->role === 'mitra') {
+            if ($mitra->mitra_id !== optional($user->mitra)->mitra_id) {
+                return response()->json([
+                    'message' => 'Unauthorized. Bukan mitra anda.',
+                ], 403);
+            }
+        } elseif ($this->isUsedByOtherProdi($user, $mitra)) {
             return response()->json([
                 'message' => 'Unauthorized. Mitra sedang digunakan mahasiswa prodi lain.',
             ], 403);
@@ -170,7 +246,12 @@ class MitraController extends Controller
     
             $data = $validator->validated();
     
-            $mitra->update($data);
+            DB::transaction(function () use ($mitra, $data) {
+                if (isset($data['email']) && $mitra->user_id) {
+                    User::where('user_id', $mitra->user_id)->update(['email' => $data['email']]);
+                }
+                $mitra->update($data);
+            });
     
             return response()->json([
                 'message' => 'Mitra berhasil diperbarui',
@@ -191,9 +272,16 @@ class MitraController extends Controller
      */
     public function destroy(Request $request, $id)
     {
+        $user = $request->user();
+        if ($user->role === 'mitra') {
+            return response()->json([
+                'message' => 'Unauthorized. Role tidak diizinkan menghapus data mitra.',
+            ], 403);
+        }
+
         $mitra = Mitra::findOrFail($id);
 
-        if ($this->isUsedByOtherProdi($request->user(), $mitra)) {
+        if ($this->isUsedByOtherProdi($user, $mitra)) {
             return response()->json([
                 'message' => 'Unauthorized. Mitra sedang digunakan mahasiswa prodi lain.',
             ], 403);

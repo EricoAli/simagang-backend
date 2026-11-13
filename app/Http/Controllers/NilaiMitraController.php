@@ -214,6 +214,8 @@ class NilaiMitraController extends Controller
             'nilai_profesionalisme_etika' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'nilai_komunikasi_presentasi' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'nilai_proyek_pengalaman_industri' => ['sometimes', 'numeric', 'min:0', 'max:100'],
+            'supervisor' => ['sometimes', 'string', 'max:255'],
+            'jabatan_supervisor' => ['sometimes', 'string', 'max:255'],
             'keterangan' => ['nullable', 'string'],
             'file' => array_merge(['sometimes'], self::FILE_RULES),
         ]);
