@@ -83,16 +83,20 @@ class MagangController extends Controller
             });
         }
 
-        // 🔎 Filter status penilaian (nilai mitra)
+        // Filter status penilaian (nilai mitra)
         if ($penilaian = $request->query('penilaian')) {
-            $user = $request->user();
-            $mitra_id = optional($user->mitra)->mitra_id;
+            $mitra_id = optional($request->user()->mitra)->mitra_id;
+
             if ($penilaian === 'none') {
-                $query->whereDoesntHave('penilaianMitra')
-                    ->where('mitra_id', $mitra_id);
+                $query->whereDoesntHave('penilaianMitra');
+                if ($mitra_id) {
+                    $query->where('mitra_id', $mitra_id);
+                }
             } elseif ($penilaian === 'exist') {
-                $query->whereHas('penilaianMitra')
-                    ->where('mitra_id', $mitra_id);
+                $query->whereHas('penilaianMitra');
+                if ($mitra_id) {
+                    $query->where('mitra_id', $mitra_id);
+                }
             }
         }
 
@@ -177,21 +181,21 @@ class MagangController extends Controller
 
         $data['mahasiswa_id'] = $mahasiswa_id;
 
-        // upload penerimaan ke private disk
+        // upload penerimaan ke public disk
         $filePenerimaan = $request->file('dokumenPenerimaan');
         $namePenerimaan = $filePenerimaan->getClientOriginalName();
         $extPenerimaan = $filePenerimaan->getClientOriginalExtension();
         $basePenerimaan = pathinfo($namePenerimaan, PATHINFO_FILENAME);
         $fileNamePenerimaan = $basePenerimaan . "_" . time() . "." . $extPenerimaan;
-        $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'local');
+        $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'public');
 
-        // upload pra KRS ke private disk
+        // upload pra KRS ke public disk
         $filePraKrs = $request->file('dokumenPraKRS');
         $namaPraKRS = $filePraKrs->getClientOriginalName();
         $extPraKRS = $filePraKrs->getClientOriginalExtension();
         $basePraKRS = pathinfo($namaPraKRS, PATHINFO_FILENAME);
         $fileNamePraKRS = $basePraKRS . "_" . time() . "." . $extPraKRS;
-        $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'local');
+        $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'public');
 
         // create magang dulu
         unset($data['dokumenPenerimaan'], $data['dokumenPraKRS']);
@@ -238,8 +242,23 @@ class MagangController extends Controller
             if (optional($magang->mahasiswa)->prodi_id !== $adminProdiId) {
                 return response()->json(['message' => 'Unauthorized. Magang bukan dari prodi anda.'], 403);
             }
-        } else {
+        } elseif ($user->role !== 'super_admin') {
             return response()->json(['message' => 'Unauthorized. Role tidak diizinkan mengubah data magang.'], 403);
+        }
+
+        // Normalisasi alias status_magang jika dikirim dari frontend
+        if ($request->has('status_magang') || $request->has('status')) {
+            $rawStatus = strtolower(trim((string) ($request->input('status_magang') ?? $request->input('status'))));
+            if (in_array($rawStatus, ['berjalan', 'revisi', 'sedang magang', 'sedang'])) {
+                $rawStatus = 'berlangsung';
+            } elseif (in_array($rawStatus, ['selesai magang', 'selesai'])) {
+                $rawStatus = 'selesai';
+            } elseif (in_array($rawStatus, ['belum magang', 'belum', 'draft'])) {
+                $rawStatus = 'draft';
+            } elseif ($rawStatus === 'ditolak') {
+                $rawStatus = 'ditolak';
+            }
+            $request->merge(['status_magang' => $rawStatus]);
         }
 
         $rules = [
@@ -250,6 +269,7 @@ class MagangController extends Controller
             'role_magang' => ['nullable', 'string', 'max:100'],
             'jobdesk' => ['nullable', 'string'],
             'periode_bulan' => ['nullable', 'integer', 'min:1'],
+            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai', 'ditolak'])],
             'dokumenPenerimaan' => 'sometimes|file|mimes:pdf|max:5120',
             'dokumenPraKRS' => 'sometimes|file|mimes:pdf|max:5120',
         ];
@@ -275,15 +295,15 @@ class MagangController extends Controller
             $extPenerimaan = $filePenerimaan->getClientOriginalExtension();
             $basePenerimaan = pathinfo($namePenerimaan, PATHINFO_FILENAME);
             $fileNamePenerimaan = $basePenerimaan . "_" . time() . "." . $extPenerimaan;
-            $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'local');
+            $pathPenerimaan = $filePenerimaan->storeAs("dokumen-penerimaan/{$mahasiswa_id}", $fileNamePenerimaan, 'public');
 
             $dokumen = $magang->dokumenMagang()->where('jenis_dokumen', 'doc_surat_penerimaan')->first();
 
             if ($dokumen && !empty($dokumen->file_path)) {
-                if (Storage::disk('local')->exists($dokumen->file_path)) {
-                    Storage::disk('local')->delete($dokumen->file_path);
-                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                if (Storage::disk('public')->exists($dokumen->file_path)) {
                     Storage::disk('public')->delete($dokumen->file_path);
+                } elseif (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
                 }
             }
 
@@ -304,15 +324,15 @@ class MagangController extends Controller
             $extPraKRS = $filePraKrs->getClientOriginalExtension();
             $basePraKRS = pathinfo($namaPraKRS, PATHINFO_FILENAME);
             $fileNamePraKRS = $basePraKRS . "_" . time() . "." . $extPraKRS;
-            $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'local');
+            $pathPraKrs = $filePraKrs->storeAs("dokumen-pra-krs/{$mahasiswa_id}", $fileNamePraKRS, 'public');
 
             $dokumen = $magang->dokumenMagang()->where('jenis_dokumen', 'doc_pra_krs')->first();
 
             if ($dokumen && !empty($dokumen->file_path)) {
-                if (Storage::disk('local')->exists($dokumen->file_path)) {
-                    Storage::disk('local')->delete($dokumen->file_path);
-                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                if (Storage::disk('public')->exists($dokumen->file_path)) {
                     Storage::disk('public')->delete($dokumen->file_path);
+                } elseif (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
                 }
             }
 
@@ -415,24 +435,54 @@ class MagangController extends Controller
         $laporan = Laporan::where('magang_id', $id)
             ->get();
 
+        // Jadwal presentasi (ambil jadwal terbaru jika ada)
+        $jadwalPresentasi = $magang->jadwalPresentasi()->orderByDesc('jadwal_id')->first();
+
         return response()->json([
             'detail' => $magang,
             'logbook' => $logbook,
             'penilaian' => $penilaian,
             'dokumen' => $dokumen,
             'laporan' => $laporan,
+            'jadwal_presentasi' => $jadwalPresentasi,
         ], 200);
     }
 
     public function exportExcel(Request $request)
     {
+        $user = $request->user();
         $angkatan = $request->query('angkatan');
         $semesterMagang = $request->query('semester_magang');
+        $prodiId = null;
+        $mitraId = null;
 
-        $fileName = "data-magang-" . $angkatan . "-" . $semesterMagang . "-" . Carbon::now()->format('ymdHi');
-        $fileName .= '.xlsx';
+        if ($user->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id;
+            if (!$mitraId) {
+                return response()->json(['message' => 'Unauthorized. Profil mitra tidak ditemukan.'], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            if (!$prodiId) {
+                return response()->json(['message' => 'Unauthorized. Admin tidak memiliki prodi.'], 403);
+            }
+            if ($request->has('mitra_id')) {
+                $mitraId = $request->query('mitra_id');
+            }
+        } elseif ($user->role === 'super_admin') {
+            if ($request->has('prodi_id')) {
+                $prodiId = $request->query('prodi_id');
+            }
+            if ($request->has('mitra_id')) {
+                $mitraId = $request->query('mitra_id');
+            }
+        } else {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
 
-        return Excel::download(new MagangExport($angkatan, $semesterMagang), $fileName);
+        $fileName = "data-magang-" . ($angkatan ?: 'all') . "-" . ($semesterMagang ?: 'all') . "-" . Carbon::now()->format('ymdHi') . '.xlsx';
+
+        return Excel::download(new MagangExport($angkatan, $semesterMagang, $prodiId, $mitraId), $fileName);
     }
 
 

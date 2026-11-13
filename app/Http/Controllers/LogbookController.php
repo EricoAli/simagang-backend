@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FotoMagang;
 use App\Models\Logbook;
+use App\Models\Magang;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -148,10 +149,15 @@ class LogbookController extends Controller
         DB::beginTransaction();
 
         try {
-            $logbook = Logbook::create([
-                'magang_id' => $request->magang_id,
-                'kegiatan' => $request->kegiatan,
-            ]);
+            $logbook = Logbook::where('magang_id', $request->magang_id)->first();
+            if ($logbook) {
+                $logbook->update(['kegiatan' => $request->kegiatan]);
+            } else {
+                $logbook = Logbook::create([
+                    'magang_id' => $request->magang_id,
+                    'kegiatan'  => $request->kegiatan,
+                ]);
+            }
 
             if ($request->has('foto')) {
                 $fotos = $request->file('foto');
