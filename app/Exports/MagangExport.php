@@ -18,13 +18,18 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
 
     protected $angkatan;
     protected $semesterMagang;
+    protected $prodiId;
+    protected $mitraId;
     protected $row = 1;
 
-    public function __construct($angkatan = null, $semesterMagang = null)
+    public function __construct($angkatan = null, $semesterMagang = null, $prodiId = null, $mitraId = null)
     {
         $this->angkatan = $angkatan;
         $this->semesterMagang = $semesterMagang;
+        $this->prodiId = $prodiId;
+        $this->mitraId = $mitraId;
     }
+
     public function collection()
     {
         $query = Magang::with([
@@ -47,6 +52,16 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
 
         if ($this->semesterMagang) {
             $query->where('semester_magang', $this->semesterMagang);
+        }
+
+        if ($this->prodiId) {
+            $query->whereHas('mahasiswa', function ($q) {
+                $q->where('prodi_id', $this->prodiId);
+            });
+        }
+
+        if ($this->mitraId) {
+            $query->where('mitra_id', $this->mitraId);
         }
 
         return $query->get();
@@ -111,7 +126,7 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
             $penilaian?->nilai_teknis ?? '-',
             $penilaian?->nilai_profesionalisme_etika ?? '-',
             $penilaian?->nilai_komunikasi_presentasi ?? '-',
-            $penilaian?->nilai_proyek_pengalaman_indsutri ?? '-',
+            $penilaian?->nilai_proyek_pengalaman_industri ?? $penilaian?->nilai_proyek_pengalaman_indsutri ?? '-',
             $penilaian?->file_path ? $baseUrl . $penilaian->file_path : '-',
             $laporan?->file_path ? $baseUrl . $laporan->file_path : '-',
         ]);
