@@ -86,7 +86,7 @@ class DokumenMagangController extends Controller
             'magang_id' => $data['magang_id'],
             'jenis_dokumen' => $data['jenis_dokumen'],
             'nama_file' => $request->file('file')->getClientOriginalName(),
-            'path_file' => $path,
+            'file_path' => $path,
             'ukuran_file' => $request->file('file')->getSize(),
             'uploaded_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
@@ -122,13 +122,13 @@ class DokumenMagangController extends Controller
 
         // Jika ada file baru, hapus lama & upload baru
         if ($request->hasFile('file')) {
-            if (!empty($dokumen->path_file) && Storage::disk('public')->exists($dokumen->path_file)) {
-                Storage::disk('public')->delete($dokumen->path_file);
+            if (!empty($dokumen->file_path) && Storage::disk('public')->exists($dokumen->file_path)) {
+                Storage::disk('public')->delete($dokumen->file_path);
             }
 
             $path = $request->file('file')->store('dokumen_magang', 'public');
             $dokumen->nama_file = $request->file('file')->getClientOriginalName();
-            $dokumen->path_file = $path;
+            $dokumen->file_path = $path;
             $dokumen->ukuran_file = $request->file('file')->getSize();
         }
 
@@ -151,8 +151,8 @@ class DokumenMagangController extends Controller
         $dokumen = DokumenMagang::findOrFail($id);
 
         // Hapus file fisik
-        if (!empty($dokumen->path_file) && Storage::disk('public')->exists($dokumen->path_file)) {
-            Storage::disk('public')->delete($dokumen->path_file);
+        if (!empty($dokumen->file_path) && Storage::disk('public')->exists($dokumen->file_path)) {
+            Storage::disk('public')->delete($dokumen->file_path);
         }
 
         $dokumen->delete();

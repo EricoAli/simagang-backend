@@ -16,15 +16,33 @@ class LaporanController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        $mahasiswa_id = $user->mahasiswa->mahasiswa_id;
+        $query = Laporan::with('magang');
 
-        $laporan = Laporan::with('magang')
-            ->whereHas('magang', function ($q) use ($mahasiswa_id) {
+        if ($user->role === 'mahasiswa') {
+            $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
+
+            if (!$mahasiswa_id) {
+                return response()->json([], 200);
+            }
+
+            $query->whereHas('magang', function ($q) use ($mahasiswa_id) {
                 $q->where('mahasiswa_id', $mahasiswa_id);
-            })
-            ->get();
+            });
+        } elseif ($user->role === 'admin') {
+            $prodi_id = optional($user->admin)->prodi_id;
 
-        return response()->json($laporan);
+            if (!$prodi_id) {
+                return response()->json([], 200);
+            }
+
+            $query->whereHas('magang.mahasiswa', function ($q) use ($prodi_id) {
+                $q->where('prodi_id', $prodi_id);
+            });
+        } else {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json($query->get(), 200);
     }
 
     /**
@@ -88,12 +106,13 @@ class LaporanController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $magangId)
+    public function show(Request $request, string $id)
     {
-        $laporan = Laporan::whereHas('magang', function ($q) use ($magangId) {
-            $q->where('id', $magangId)
-                ->where('mahasiswa_id', auth()->id());
-        })->firstOrFail();
+        $laporan = Laporan::with('magang')->findOrFail($id);
+
+        if (!$this->canAccess($request->user(), $laporan)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         return response()->json($laporan);
     }
@@ -115,15 +134,10 @@ class LaporanController extends Controller
             'file' => 'required|file|mimes:pdf|max:5048',
         ]);
 
-        $user = $request->user();
-        $mahasiswa_id = $user->mahasiswa->mahasiswa_id;
+        $laporan = Laporan::with('magang')->findOrFail($id);
 
-        $laporan = Laporan::whereHas('magang', function ($q) use ($mahasiswa_id) {
-            $q->where('mahasiswa_id', $mahasiswa_id);
-        })->where('laporan_id', $id)->first();
-
-        if (!$laporan) {
-            return response()->json(['message' => 'Laporan tidak ditemukan'], 500);
+        if (!$this->canAccess($request->user(), $laporan)) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
         // hapus file lama
@@ -134,7 +148,7 @@ class LaporanController extends Controller
         $extFile = $file->getClientOriginalExtension();
         $base = pathinfo($namaFile, PATHINFO_FILENAME);
         $fileName = $base . "_" . time() . "." . $extFile;
-        $path = $file->storeAs("laporan-magang/{$request->magang_id}", $fileName, 'public');
+        $path = $file->storeAs("laporan-magang/{$laporan->magang_id}", $fileName, 'public');
 
         $laporan->update([
             'file_path' => $path,
@@ -149,12 +163,13 @@ class LaporanController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($magangId)
+    public function destroy(Request $request, $id)
     {
-        $laporan = Laporan::whereHas('magang', function ($q) use ($magangId) {
-            $q->where('id', $magangId)
-                ->where('mahasiswa_id', auth()->id());
-        })->firstOrFail();
+        $laporan = Laporan::with('magang')->findOrFail($id);
+
+        if (!$this->canAccess($request->user(), $laporan)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         Storage::disk('public')->delete($laporan->file_path);
         $laporan->delete();
@@ -162,5 +177,24 @@ class LaporanController extends Controller
         return response()->json([
             'message' => 'Laporan magang berhasil dihapus'
         ]);
+    }
+
+    /**
+     * Cek apakah user berhak mengakses laporan.
+     */
+    private function canAccess($user, Laporan $laporan): bool
+    {
+        if ($user->role === 'admin') {
+            $prodi_id = optional($user->admin)->prodi_id;
+
+            return $prodi_id
+                && optional($laporan->magang->mahasiswa)->prodi_id === $prodi_id;
+        }
+
+        $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
+
+        return $mahasiswa_id
+            && $laporan->magang
+            && $laporan->magang->mahasiswa_id === $mahasiswa_id;
     }
 }

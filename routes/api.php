@@ -149,7 +149,7 @@ Route::prefix('dokumen-magang')
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
-        Route::post('/{id}', 'update');
+        Route::match(['post', 'put'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
 
@@ -282,6 +282,6 @@ Route::prefix('laporan')
         Route::get('/', 'index');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
-        Route::put('/{id}', 'update');
+        Route::match(['put', 'post'], '/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });

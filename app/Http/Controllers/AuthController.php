@@ -77,7 +77,7 @@ class AuthController extends Controller
         return response()->json([
             'access_token' => $token,
             'role' => $user->role,
-            'user' => $user->load('mitra', 'mahasiswa'),
+            'user' => $user->load('mitra', 'mahasiswa.prodi', 'admin.prodi'),
             'token_type' => 'Bearer',
             'expires_at' => $token_expired,
         ]);

@@ -30,10 +30,15 @@ class MagangController extends Controller
 
         $query = Magang::with(['mahasiswa', 'mitra', 'dosenPembimbing']);
 
-        // Filter otomatis jika role adalah mahasiswmahasiswaIda
-        if ($user->role === 'mahasiswa') {
+        // Filter otomatis jika role adalah mahasiswa
+        if ($user->role === 'mahasiswa' && $mahasiswa) {
             // asumsikan user.id terhubung ke mahasiswa.id atau ke field user_id di tabel mahasiswa
             $query->where('mahasiswa_id', $mahasiswa->mahasiswa_id)->orderBy("created_at");
+        }
+
+        // Filter otomatis jika role adalah mitra
+        if ($user->role === 'mitra' && $user->mitra) {
+            $query->where('mitra_id', $user->mitra->mitra_id);
         }
 
         // 🔎 Filter manual berdasarkan query param (admin bisa gunakan ini)
@@ -64,16 +69,22 @@ class MagangController extends Controller
 
         // 🔎 Filter status penilaian (nilai mitra)
         if ($penilaian = $request->query('penilaian')) {
-            $user = $request->user();
-            $mitra_id = $user->mitra->mitra_id;
+            $mitra_id = optional($request->user()->mitra)->mitra_id;
+
             if ($penilaian === 'none') {
                 // Magang yang BELUM ada penilaian mitra
-                $query->whereDoesntHave('penilaianMitra')
-                    ->where('mitra_id', $mitra_id);
+                $query->whereDoesntHave('penilaianMitra');
+
+                if ($mitra_id) {
+                    $query->where('mitra_id', $mitra_id);
+                }
             } elseif ($penilaian === 'exist') {
                 // Magang yang SUDAH ada penilaian mitra
-                $query->whereHas('penilaianMitra')
-                    ->where('mitra_id', $mitra_id);
+                $query->whereHas('penilaianMitra');
+
+                if ($mitra_id) {
+                    $query->where('mitra_id', $mitra_id);
+                }
             }
         }
 
@@ -204,6 +215,7 @@ class MagangController extends Controller
             'role_magang' => ['nullable', 'string', 'max:100'],
             'jobdesk' => ['nullable', 'string'],
             'periode_bulan' => ['nullable', 'integer', 'min:1'],
+            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai', 'ditolak'])],
             'dokumenPenerimaan' => 'sometimes|file|mimes:pdf|max:5120',
             'dokumenPraKRS' => 'sometimes|file|mimes:pdf|max:5120',
         ];
