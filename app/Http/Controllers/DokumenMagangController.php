@@ -107,7 +107,7 @@ class DokumenMagangController extends Controller
         $rules = [
             'magang_id' => ['required', 'exists:magang,magang_id'],
             'jenis_dokumen' => ['required', 'string', 'max:100'],
-            'file' => ['required', 'file', 'max:5120'], // max 5MB
+            'file' => ['required', 'file', 'mimes:pdf,doc,docx', 'max:5120'], // max 5MB
         ];
 
         $validator = Validator::make($request->all(), $rules);
@@ -134,8 +134,8 @@ class DokumenMagangController extends Controller
             }
         }
 
-        // Upload file ke storage privat (local)
-        $path = $request->file('file')->store('dokumen_magang', 'local');
+        // Upload file ke storage publik
+        $path = $request->file('file')->store('dokumen_magang', 'public');
 
         $dokumen = DokumenMagang::create([
             'magang_id' => $data['magang_id'],
@@ -192,14 +192,14 @@ class DokumenMagangController extends Controller
         // Jika ada file baru, hapus lama & upload baru
         if ($request->hasFile('file')) {
             if (!empty($dokumen->file_path)) {
-                if (Storage::disk('local')->exists($dokumen->file_path)) {
-                    Storage::disk('local')->delete($dokumen->file_path);
-                } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+                if (Storage::disk('public')->exists($dokumen->file_path)) {
                     Storage::disk('public')->delete($dokumen->file_path);
+                } elseif (Storage::disk('local')->exists($dokumen->file_path)) {
+                    Storage::disk('local')->delete($dokumen->file_path);
                 }
             }
 
-            $path = $request->file('file')->store('dokumen_magang', 'local');
+            $path = $request->file('file')->store('dokumen_magang', 'public');
             $dokumen->nama_file = $request->file('file')->getClientOriginalName();
             $dokumen->file_path = $path;
             $dokumen->ukuran_file = $request->file('file')->getSize();
@@ -233,16 +233,16 @@ class DokumenMagangController extends Controller
             if (optional($dokumen->magang->mahasiswa)->prodi_id !== $adminProdiId) {
                 return response()->json(['message' => 'Unauthorized. Dokumen bukan dari prodi anda.'], 403);
             }
-        } else {
+        } elseif ($user->role !== 'super_admin') {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        // Hapus file fisik (cek disk local lalu fallback public)
+        // Hapus file fisik (cek disk public lalu fallback local)
         if (!empty($dokumen->file_path)) {
-            if (Storage::disk('local')->exists($dokumen->file_path)) {
-                Storage::disk('local')->delete($dokumen->file_path);
-            } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+            if (Storage::disk('public')->exists($dokumen->file_path)) {
                 Storage::disk('public')->delete($dokumen->file_path);
+            } elseif (Storage::disk('local')->exists($dokumen->file_path)) {
+                Storage::disk('local')->delete($dokumen->file_path);
             }
         }
 
@@ -308,10 +308,10 @@ class DokumenMagangController extends Controller
 
         $disk = null;
         if (!empty($dokumen->file_path)) {
-            if (Storage::disk('local')->exists($dokumen->file_path)) {
-                $disk = 'local';
-            } elseif (Storage::disk('public')->exists($dokumen->file_path)) {
+            if (Storage::disk('public')->exists($dokumen->file_path)) {
                 $disk = 'public';
+            } elseif (Storage::disk('local')->exists($dokumen->file_path)) {
+                $disk = 'local';
             }
         }
 

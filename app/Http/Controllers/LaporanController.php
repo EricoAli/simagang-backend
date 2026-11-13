@@ -25,7 +25,7 @@ class LaporanController extends Controller
                     $q->where('mahasiswa_id', $mahasiswa_id);
                 });
             } else {
-                $query->whereRaw('1 = 0');
+                return response()->json([], 200);
             }
         } elseif ($user->role === 'admin') {
             $prodiId = optional($user->admin)->prodi_id;
@@ -34,13 +34,15 @@ class LaporanController extends Controller
                     $q->where('prodi_id', $prodiId);
                 });
             } else {
-                $query->whereRaw('1 = 0');
+                return response()->json([], 200);
             }
+        } elseif ($user->role !== 'super_admin') {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $laporan = $query->get();
 
-        return response()->json($laporan);
+        return response()->json($laporan, 200);
     }
 
     /**
@@ -86,7 +88,7 @@ class LaporanController extends Controller
         $extFile = $file->getClientOriginalExtension();
         $base = pathinfo($namaFile, PATHINFO_FILENAME);
         $fileName = $base . "_" . time() . "." . $extFile;
-        $path = $file->storeAs("laporan-magang/{$magang_id}", $fileName, 'local');
+        $path = $file->storeAs("laporan-magang/{$magang_id}", $fileName, 'public');
 
         $laporan = Laporan::create([
             'magang_id' => $magang_id,
@@ -120,7 +122,7 @@ class LaporanController extends Controller
             $prodiId = optional($user->admin)->prodi_id;
             $query->whereHas('magang.mahasiswa', fn($q) => $q->where('prodi_id', $prodiId));
         } elseif ($user->role !== 'super_admin') {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
         $laporan = $query->first();
@@ -158,18 +160,21 @@ class LaporanController extends Controller
 
         $laporan = Laporan::whereHas('magang', function ($q) use ($mahasiswa_id) {
             $q->where('mahasiswa_id', $mahasiswa_id);
-        })->where('laporan_id', $id)->first();
+        })->where(function ($q) use ($id) {
+            $q->where('laporan_id', $id)
+              ->orWhere('magang_id', $id);
+        })->first();
 
         if (!$laporan) {
             return response()->json(['message' => 'Laporan tidak ditemukan'], 404);
         }
 
-        // hapus file lama (cek disk local lalu public untuk legacy)
+        // hapus file lama (cek disk public lalu local untuk legacy)
         if (!empty($laporan->file_path)) {
-            if (Storage::disk('local')->exists($laporan->file_path)) {
-                Storage::disk('local')->delete($laporan->file_path);
-            } elseif (Storage::disk('public')->exists($laporan->file_path)) {
+            if (Storage::disk('public')->exists($laporan->file_path)) {
                 Storage::disk('public')->delete($laporan->file_path);
+            } elseif (Storage::disk('local')->exists($laporan->file_path)) {
+                Storage::disk('local')->delete($laporan->file_path);
             }
         }
 
@@ -178,7 +183,7 @@ class LaporanController extends Controller
         $extFile = $file->getClientOriginalExtension();
         $base = pathinfo($namaFile, PATHINFO_FILENAME);
         $fileName = $base . "_" . time() . "." . $extFile;
-        $path = $file->storeAs("laporan-magang/{$laporan->magang_id}", $fileName, 'local');
+        $path = $file->storeAs("laporan-magang/{$laporan->magang_id}", $fileName, 'public');
 
         $laporan->update([
             'file_path' => $path,
@@ -196,7 +201,10 @@ class LaporanController extends Controller
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        $query = Laporan::with('magang.mahasiswa')->where('laporan_id', $id);
+        $query = Laporan::with('magang.mahasiswa')->where(function ($q) use ($id) {
+            $q->where('laporan_id', $id)
+              ->orWhere('magang_id', $id);
+        });
 
         if ($user->role === 'mahasiswa') {
             $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
@@ -204,7 +212,7 @@ class LaporanController extends Controller
         } elseif ($user->role === 'admin') {
             $prodiId = optional($user->admin)->prodi_id;
             $query->whereHas('magang.mahasiswa', fn($q) => $q->where('prodi_id', $prodiId));
-        } else {
+        } elseif ($user->role !== 'super_admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -213,12 +221,12 @@ class LaporanController extends Controller
             return response()->json(['message' => 'Laporan tidak ditemukan'], 404);
         }
 
-        // Hapus file fisik (cek local lalu public)
+        // Hapus file fisik (cek public lalu local)
         if (!empty($laporan->file_path)) {
-            if (Storage::disk('local')->exists($laporan->file_path)) {
-                Storage::disk('local')->delete($laporan->file_path);
-            } elseif (Storage::disk('public')->exists($laporan->file_path)) {
+            if (Storage::disk('public')->exists($laporan->file_path)) {
                 Storage::disk('public')->delete($laporan->file_path);
+            } elseif (Storage::disk('local')->exists($laporan->file_path)) {
+                Storage::disk('local')->delete($laporan->file_path);
             }
         }
 
@@ -234,7 +242,12 @@ class LaporanController extends Controller
      */
     public function download(Request $request, $id)
     {
-        $laporan = Laporan::with('magang.mahasiswa')->findOrFail($id);
+        $laporan = Laporan::with('magang.mahasiswa')
+            ->where(function ($q) use ($id) {
+                $q->where('laporan_id', $id)
+                  ->orWhere('magang_id', $id);
+            })->firstOrFail();
+
         $user = $request->user();
 
         if ($user->role === 'mahasiswa') {
@@ -252,10 +265,10 @@ class LaporanController extends Controller
 
         $disk = null;
         if (!empty($laporan->file_path)) {
-            if (Storage::disk('local')->exists($laporan->file_path)) {
-                $disk = 'local';
-            } elseif (Storage::disk('public')->exists($laporan->file_path)) {
+            if (Storage::disk('public')->exists($laporan->file_path)) {
                 $disk = 'public';
+            } elseif (Storage::disk('local')->exists($laporan->file_path)) {
+                $disk = 'local';
             }
         }
 
