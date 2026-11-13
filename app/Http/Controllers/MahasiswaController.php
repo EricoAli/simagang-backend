@@ -54,11 +54,16 @@ class MahasiswaController extends Controller
             });
         }
 
-        $sortBy = $request->query('sort_by', 'mahasiswa_id');
-        $sortOrder = $request->query('sort_order', 'desc');
+        // Hanya kolom tabel ini yang boleh dipakai untuk sorting; selain itu pakai default.
+        $sortable = ['mahasiswa_id', 'user_id', 'prodi_id', 'nim', 'nama', 'angkatan', 'created_at', 'updated_at'];
+        $sortBy = in_array($request->query('sort_by'), $sortable, true)
+            ? $request->query('sort_by')
+            : 'mahasiswa_id';
+        $sortOrderInput = $request->query('sort_order', 'desc');
+        $sortOrder = is_string($sortOrderInput) && strtolower($sortOrderInput) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
-        $perPage = (int) $request->query('per_page', 10);
+        $perPage = max(1, (int) $request->query('per_page', 10));
         $mahasiswa = $query->paginate($perPage);
 
         return response()->json($mahasiswa, 200);
@@ -111,8 +116,8 @@ class MahasiswaController extends Controller
     public function store(Request $request)
     {
         $rules = [
-            'nim' => ['required', 'string', 'max:50', 'unique:mahasiswa,nim'],
-            'nama' => ['required', 'string', 'max:255'],
+            'nim' => ['required', 'string', 'max:20', 'unique:mahasiswa,nim'],
+            'nama' => ['required', 'string', 'max:100'],
         ];
 
         $messages = [
@@ -188,14 +193,16 @@ class MahasiswaController extends Controller
     {
         $rules = [
             'mahasiswa_id' => ['required', 'integer', 'exists:mahasiswa,mahasiswa_id'],
-            'nim' => ['required', 'string', 'max:50'],
-            'nama' => ['required', 'string', 'max:255'],
+            'nim' => ['required', 'string', 'max:20', Rule::unique('mahasiswa', 'nim')->ignore((int) $request->input('mahasiswa_id'), 'mahasiswa_id')],
+            'nama' => ['required', 'string', 'max:100'],
             'angkatan' => ['nullable', 'integer'],
         ];
 
-        // Validasi NIM uniqueness tapi ignore untuk id ini
+        // NIM harus unik, kecuali NIM milik mahasiswa yang sedang diubah ini.
         
-        $validator = Validator::make($request->all(), $rules);
+        $validator = Validator::make($request->all(), $rules, [
+            'nim.unique' => 'Mahasiswa dengan NIM tersebut telah terdaftar',
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
@@ -224,6 +231,63 @@ class MahasiswaController extends Controller
             unset($data['mahasiswa_id']);
     
             $mahasiswa->update($data);
+
+            // Sinkronisasi status_magang jika dikirim dari form/modal Admin
+            if ($request->filled('status_magang') || $request->filled('status')) {
+                $rawStatus = strtolower(trim((string) ($request->input('status_magang') ?? $request->input('status'))));
+                if (in_array($rawStatus, ['berjalan', 'revisi', 'sedang magang', 'sedang'])) {
+                    $statusEnum = 'berlangsung';
+                } elseif (in_array($rawStatus, ['selesai magang', 'selesai'])) {
+                    $statusEnum = 'selesai';
+                } elseif (in_array($rawStatus, ['belum magang', 'belum', 'draft'])) {
+                    $statusEnum = 'draft';
+                } elseif ($rawStatus === 'ditolak') {
+                    $statusEnum = 'ditolak';
+                } else {
+                    $statusEnum = $rawStatus;
+                }
+
+                if (in_array($statusEnum, ['draft', 'berlangsung', 'selesai', 'ditolak'])) {
+                    $latestMagang = $mahasiswa->magang()->orderByDesc('magang_id')->first();
+                    if ($latestMagang) {
+                        $latestMagang->update(['status_magang' => $statusEnum]);
+                    } elseif ($statusEnum !== 'draft') {
+                        $defaultMitra = \App\Models\Mitra::first();
+                        $defaultDosbing = \App\Models\Dosbing::first();
+                        $latestMagang = $mahasiswa->magang()->create([
+                            'mitra_id' => $defaultMitra?->mitra_id,
+                            'dosbing_id' => $defaultDosbing?->dosbing_id,
+                            'tahun_ajaran' => $mahasiswa->angkatan ? ((int) $mahasiswa->angkatan + 3) : (int) date('Y'),
+                            'semester_magang' => 6,
+                            'jumlah_magang_ke' => 1,
+                            'status_magang' => $statusEnum,
+                            'role_magang' => 'Intern',
+                            'periode_bulan' => 6,
+                        ]);
+                    }
+                }
+            }
+
+            // Sinkronisasi mitra & dosen jika disertakan
+            if ($request->filled('mitra') || $request->filled('dosen')) {
+                $latestMagang = $mahasiswa->magang()->orderByDesc('magang_id')->first();
+                if ($latestMagang) {
+                    if ($request->filled('mitra')) {
+                        $mitraVal = $request->input('mitra');
+                        $mitraId = is_numeric($mitraVal) ? (int)$mitraVal : \App\Models\Mitra::where('nama_mitra', $mitraVal)->value('mitra_id');
+                        if ($mitraId) {
+                            $latestMagang->update(['mitra_id' => $mitraId]);
+                        }
+                    }
+                    if ($request->filled('dosen')) {
+                        $dosenVal = $request->input('dosen');
+                        $dosbingId = is_numeric($dosenVal) ? (int)$dosenVal : \App\Models\Dosbing::where('nama', $dosenVal)->value('dosbing_id');
+                        if ($dosbingId) {
+                            $latestMagang->update(['dosbing_id' => $dosbingId]);
+                        }
+                    }
+                }
+            }
     
             return response()->json([
                 'message' => 'Mahasiswa berhasil diperbarui',
