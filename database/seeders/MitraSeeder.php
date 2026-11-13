@@ -15,27 +15,70 @@ class MitraSeeder extends Seeder
      */
     public function run(): void
     {
+        $mitraList = [
+            [
+                'username'   => 'mitra_tokopedia',
+                'email'      => 'internship@tokopedia.com',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT GoTo Gojek Tokopedia',
+                'narahubung' => 'Kevin Sanjaya (Engineering Lead)',
+            ],
+            [
+                'username'   => 'mitra_telkom',
+                'email'      => 'internship@telkom.co.id',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT Telkom Indonesia',
+                'narahubung' => 'Andi Pratama (Talent Acquisition)',
+            ],
+            [
+                'username'   => 'mitra_traveloka',
+                'email'      => 'hr@traveloka.com',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT Traveloka Indonesia',
+                'narahubung' => 'Dewi Lestari (HR Manager)',
+            ],
+            [
+                'username'   => 'mitra_mandiri',
+                'email'      => 'magang@bankmandiri.co.id',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT Bank Mandiri (Persero) Tbk',
+                'narahubung' => 'Rudi Hartono (VP IT Operation)',
+            ],
+            [
+                'username'   => 'mitra_bukalapak',
+                'email'      => 'career@bukalapak.com',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT Bukalapak.com Tbk',
+                'narahubung' => 'Maya Sari (Tech Recruiter)',
+            ],
+            [
+                'username'   => 'mitra_shopee',
+                'email'      => 'intern@shopee.co.id',
+                'password'   => 'mitrapassword123',
+                'nama_mitra' => 'PT Shopee International Indonesia',
+                'narahubung' => 'Bambang Pamungkas (Campus Relations)',
+            ],
+        ];
 
-        for ($i = 1; $i <= 16; $i++) {
+        foreach ($mitraList as $data) {
+            $user = User::updateOrCreate(
+                ['username' => $data['username']],
+                [
+                    'email'     => $data['email'],
+                    'password'  => Hash::make($data['password']),
+                    'role'      => 'mitra',
+                    'is_active' => true,
+                ]
+            );
 
-            $email = "mitra$i@example.com";
-            $username = Str::before($email, '@');
-
-            // 🔹 Buat user untuk mitra
-            $user = User::create([
-                'email' => $email,
-                'username' => $username,
-                'password' => Hash::make($username), // password = username
-                'role' => 'mitra',
-            ]);
-
-            // 🔹 Buat data mitra
-            Mitra::create([
-                'nama_mitra' => "PT Mitra Sejahtera $i",
-                'user_id' => $user->user_id,
-                'email' => $email,
-                'narahubung' => "Nama narahubung $i",
-            ]);
+            Mitra::updateOrCreate(
+                ['user_id' => $user->user_id],
+                [
+                    'nama_mitra' => $data['nama_mitra'],
+                    'email'      => $data['email'],
+                    'narahubung' => $data['narahubung'],
+                ]
+            );
         }
     }
 }

@@ -2,63 +2,47 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use App\Models\Magang;
 use Carbon\Carbon;
 
 class JadwalPresentasiSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        DB::table('jadwal_presentasi')->insert([
-            [
-                'tanggal_presentasi' => Carbon::create(2025, 11, 10),
-                'waktu_mulai' => '09:00',
-                'waktu_selesai' => '10:00',
-                'tempat' => 'Gedung A',
-                'ruangan' => 'Ruang 101',
-                'keterangan' => 'Presentasi akhir magang batch 1',
-                'status' => 'terjadwal',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'tanggal_presentasi' => Carbon::create(2025, 11, 12),
-                'waktu_mulai' => '13:00',
-                'waktu_selesai' => '14:00',
-                'tempat' => 'Gedung B',
-                'ruangan' => 'Ruang 202',
-                'keterangan' => 'Presentasi tengah magang batch 2',
-                'status' => 'terjadwal',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'tanggal_presentasi' => Carbon::create(2025, 11, 15),
-                'waktu_mulai' => '10:00',
-                'waktu_selesai' => '11:00',
-                'tempat' => 'Gedung C',
-                'ruangan' => 'Ruang 303',
-                'keterangan' => 'Presentasi akhir magang batch 3',
-                'status' => 'selesai',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'tanggal_presentasi' => Carbon::create(2025, 11, 18),
-                'waktu_mulai' => '08:00',
-                'waktu_selesai' => '09:00',
-                'tempat' => 'Aula Utama',
-                'ruangan' => 'Aula 1',
-                'keterangan' => 'Presentasi dibatalkan karena kendala teknis',
-                'status' => 'dibatalkan',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+        $magangList = Magang::where('status_magang', '!=', 'draft')->get();
+
+        if ($magangList->isEmpty()) {
+            return;
+        }
+
+        $ruanganList = [
+            'Lab Rekayasa Perangkat Lunak (Ruang 201)',
+            'Lab Jaringan & Sistem Cerdas (Ruang 202)',
+            'Ruang Seminar DTEDI Lantai 3',
+            'Auditorium Gedung Herman Johannes',
+        ];
+
+        foreach ($magangList->take(6) as $index => $magang) {
+            $ruangan = $ruanganList[$index % count($ruanganList)];
+            $tgl = Carbon::now()->addDays($index * 2 + 1)->format('Y-m-d');
+            $status = $index % 3 === 0 ? 'selesai' : 'terjadwal';
+
+            DB::table('jadwal_presentasi')->updateOrInsert(
+                ['magang_id' => $magang->magang_id],
+                [
+                    'tanggal_presentasi' => $tgl,
+                    'waktu_mulai'        => '09:00',
+                    'waktu_selesai'      => '10:30',
+                    'tempat'             => 'Departemen DTEDI SV UGM',
+                    'ruangan'            => $ruangan,
+                    'keterangan'         => 'Presentasi Kemajuan dan Evaluasi Laporan Proyek Industri Magang.',
+                    'status'             => $status,
+                    'created_at'         => now(),
+                    'updated_at'         => now(),
+                ]
+            );
+        }
     }
 }

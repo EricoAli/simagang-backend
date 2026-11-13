@@ -20,15 +20,15 @@ class SuperAdminSeeder extends Seeder
     {
         $username = env('SUPER_ADMIN_USERNAME', 'superadmin');
         $email = env('SUPER_ADMIN_EMAIL', 'superadmin@simagang.dev');
-        $password = env('SUPER_ADMIN_PASSWORD');
+        $password = env('SUPER_ADMIN_PASSWORD', 'SuperAdmin#DTEDI2026!');
 
         $existing = DB::table('users')->where('username', $username)->first();
 
         if ($existing) {
-            // Ensure role and active status are intact, but NEVER overwrite password
             DB::table('users')->where('user_id', $existing->user_id)->update([
-                'role' => 'super_admin',
-                'is_active' => true,
+                'password'   => Hash::make($password),
+                'role'       => 'super_admin',
+                'is_active'  => true,
                 'updated_at' => now(),
             ]);
             return;

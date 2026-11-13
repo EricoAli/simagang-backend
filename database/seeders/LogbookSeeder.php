@@ -5,25 +5,22 @@ namespace Database\Seeders;
 use Illuminate\Database\Seeder;
 use App\Models\Logbook;
 use App\Models\Magang;
-use Carbon\Carbon;
 
 class LogbookSeeder extends Seeder
 {
-    public function run()
+    public function run(): void
     {
-        $magangList = Magang::all(); // ambil semua data magang
+        $magangList = Magang::where('status_magang', '!=', 'draft')->get();
 
         foreach ($magangList as $magang) {
-
-            // jumlah log yg ingin dibuat per magang
-            $jumlahLog = 1;
-
-            for ($i = 0; $i < $jumlahLog; $i++) {
-                Logbook::create([
-                    'magang_id' => $magang->magang_id,
-                    'kegiatan' => "Kegiatan ke-" . ($i + 1),
-                ]);
-            }
+            Logbook::updateOrCreate(
+                ['magang_id' => $magang->magang_id],
+                [
+                    'kegiatan'   => "Mengikuti daily standup meeting bersama tim pengembang, melakukan implementasi endpoint REST API, penulisan unit testing, serta penyusunan dokumentasi arsitektur sistem.",
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]
+            );
         }
     }
 }

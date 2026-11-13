@@ -74,7 +74,16 @@ class AdminSeeder extends Seeder
                     'email'      => $adminData['email'],
                     'password'   => Hash::make($adminData['password']),
                     'role'       => 'admin',
+                    'is_active'  => true,
                     'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            } else {
+                DB::table('users')->where('user_id', $userId)->update([
+                    'email'      => $adminData['email'],
+                    'password'   => Hash::make($adminData['password']),
+                    'role'       => 'admin',
+                    'is_active'  => true,
                     'updated_at' => now(),
                 ]);
             }
