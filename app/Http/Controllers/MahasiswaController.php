@@ -235,7 +235,7 @@ class MahasiswaController extends Controller
             // Sinkronisasi status_magang jika dikirim dari form/modal Admin
             if ($request->filled('status_magang') || $request->filled('status')) {
                 $rawStatus = strtolower(trim((string) ($request->input('status_magang') ?? $request->input('status'))));
-                if (in_array($rawStatus, ['berjalan', 'revisi', 'sedang magang', 'sedang'])) {
+                if (in_array($rawStatus, ['berjalan', 'revisi', 'sedang magang', 'sedang', 'berlangsung'])) {
                     $statusEnum = 'berlangsung';
                 } elseif (in_array($rawStatus, ['selesai magang', 'selesai'])) {
                     $statusEnum = 'selesai';

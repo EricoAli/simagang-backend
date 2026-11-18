@@ -26,6 +26,20 @@ class Mahasiswa extends Model
         'updated_at',
     ];
 
+    protected $appends = [
+        'status_magang',
+    ];
+
+    public function getStatusMagangAttribute(): ?string
+    {
+        if ($this->relationLoaded('magang')) {
+            $latest = $this->magang->sortByDesc('magang_id')->first();
+            return $latest ? $latest->status_magang : null;
+        }
+        $latest = $this->magang()->orderByDesc('magang_id')->first();
+        return $latest ? $latest->status_magang : null;
+    }
+
     // Relasi
     public function user()
     {
