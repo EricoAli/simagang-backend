@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\DokumenMagang;
 use App\Models\Magang;
 use Illuminate\Support\Facades\Storage;
@@ -13,6 +14,8 @@ use Illuminate\Http\Request;
 
 class DokumenMagangController extends Controller
 {
+    use AuthorizesMagangAccess;
+
     /**
      * Tampilkan daftar dokumen magang (dengan filter & pagination).
      */
@@ -22,16 +25,8 @@ class DokumenMagangController extends Controller
 
         $query = DokumenMagang::with('magang:magang_id,mahasiswa_id,semester_magang');
 
-        // 🔐 Filter otomatis untuk role mahasiswa
-        if ($user && $user->mahasiswa) {
-            // Jika user adalah mahasiswa, filter berdasarkan mahasiswa_id mereka
-            $mahasiswaId = $user->mahasiswa->mahasiswa_id;
-
-            $query->whereHas('magang', function ($q) use ($mahasiswaId) {
-                $q->where('mahasiswa_id', $mahasiswaId);
-            });
-        }
-        // Jika bukan mahasiswa (admin, pembimbing, dll), tampilkan semua dokumen
+        // 🔐 Batasi data sesuai prodi Admin / kepemilikan mahasiswa / mitra.
+        $this->scopeByMagangAccess($query, $user, 'magang');
 
         // Filter berdasarkan magang_id
         if ($magangId = $request->query('magang_id')) {
@@ -51,9 +46,11 @@ class DokumenMagangController extends Controller
     /**
      * Tampilkan detail dokumen.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $dokumen = DokumenMagang::with('magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), $dokumen->magang);
 
         return response()->json($dokumen, 200);
     }
@@ -79,6 +76,11 @@ class DokumenMagangController extends Controller
 
         $data = $validator->validated();
 
+        $this->authorizeMagangAccess(
+            $request->user(),
+            Magang::findOrFail($data['magang_id'])
+        );
+
         // Upload file
         $path = $request->file('file')->store('dokumen_magang', 'public');
 
@@ -103,7 +105,9 @@ class DokumenMagangController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $dokumen = DokumenMagang::findOrFail($id);
+        $dokumen = DokumenMagang::with('magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), $dokumen->magang);
 
         $rules = [
             'jenis_dokumen' => ['nullable', 'string', 'max:100'],
@@ -146,9 +150,11 @@ class DokumenMagangController extends Controller
     /**
      * Hapus dokumen.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $dokumen = DokumenMagang::findOrFail($id);
+        $dokumen = DokumenMagang::with('magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), $dokumen->magang);
 
         // Hapus file fisik
         if (!empty($dokumen->file_path) && Storage::disk('public')->exists($dokumen->file_path)) {
@@ -164,13 +170,9 @@ class DokumenMagangController extends Controller
 
     public function getDocMagangByMagang(Request $request, $id)
     {
-        // $user = $request->user();
-        // $mahasiswa = $user->mahasiswa;
         $magang = Magang::findOrFail($id);
 
-        // if ($user->role === 'mahasiswa' && $mahasiswa->mahasiswa_id !== $magang->mahasiswa_id) {
-        //     abort(403, 'Access denied.');
-        // }
+        $this->authorizeMagangAccess($request->user(), $magang);
 
         $documents = DokumenMagang::where('magang_id', $magang->magang_id)->get();
         return response()->json(['dokumen' => $documents], 200);

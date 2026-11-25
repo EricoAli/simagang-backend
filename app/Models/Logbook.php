@@ -3,7 +3,6 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class Logbook extends Model
 {
@@ -13,22 +12,13 @@ class Logbook extends Model
     protected $fillable = [
         'magang_id',
         'kegiatan',
+        'tanggal_kegiatan',
     ];
 
-    protected $hidden = [
-        'created_at',
-        'updated_at'
+    protected $casts = [
+        'tanggal_kegiatan' => 'date:Y-m-d',
     ];
 
-    protected static function booted()
-    {
-        static::deleting(function ($logbook) {
-            foreach ($logbook->fotoKegiatan as $foto) {
-                Storage::delete($foto->file_path);
-            }
-        });
-    }
-    
     public function magang()
     {
         return $this->belongsTo(Magang::class, 'magang_id', 'magang_id');

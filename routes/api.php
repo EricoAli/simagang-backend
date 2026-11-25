@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\AngkatanController;
+use App\Http\Controllers\ProdiController;
+use App\Http\Controllers\TahunAjaranController;
+use App\Http\Controllers\PeriodeMagangController;
 use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
@@ -94,10 +97,32 @@ Route::prefix('mitra')
         Route::get('/jumlah', 'jumlahMitra');
         Route::get('/magang/{id}', 'getMitraByMagang');
         Route::get('/', 'index');
-        Route::post('/', 'store');
+        Route::post('/', 'store')->middleware('master-data.manager');
         Route::get('/show', 'show');
-        Route::put('/{id}', 'update');
-        Route::delete('/{id}', 'destroy');
+        Route::put('/{id}', 'update')->middleware('master-data.manager');
+        Route::delete('/{id}', 'destroy')->middleware('master-data.manager');
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| Master Tahun Ajaran and Internship Period Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('tahun-ajaran')
+    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->controller(TahunAjaranController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store')->middleware('master-period.super-admin');
+        Route::put('/{id}', 'update')->middleware('master-period.super-admin');
+    });
+
+Route::prefix('periode-magang')
+    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->controller(PeriodeMagangController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::post('/', 'store')->middleware('master-period.super-admin');
+        Route::put('/{id}', 'update')->middleware('master-period.super-admin');
     });
 
 
@@ -164,6 +189,10 @@ Route::prefix('jadwal-presentasi')
     ->controller(JadwalPresentasiController::class)->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
+        Route::get('/{id}/peserta', 'peserta');
+        Route::get('/{id}/mahasiswa-eligible', 'eligiblePeserta');
+        Route::post('/{id}/peserta', 'tambahPeserta');
+        Route::delete('/{id}/peserta/{magangId}', 'hapusPeserta');
         Route::get('/{id}', 'show');
         Route::put('/{id}', 'update');
         Route::delete('/{id}', 'destroy');
@@ -183,10 +212,10 @@ Route::prefix('dosbing')
         Route::get('/magang/{id}', 'getDosbingByMagangId');
         Route::get('/jumlah', 'jumlahDosbing');
         Route::get('/', 'index');
-        Route::post('/', 'store');
+        Route::post('/', 'store')->middleware('master-data.manager');
         Route::get('/{id}', 'show');
-        Route::put('/{id}', 'update');
-        Route::delete('/{id}', 'destroy');
+        Route::put('/{id}', 'update')->middleware('master-data.manager');
+        Route::delete('/{id}', 'destroy')->middleware('master-data.manager');
     });
 
 
@@ -251,6 +280,13 @@ Route::prefix('angkatan')
     ->controller(AngkatanController::class)
     ->group(function () {
         Route::get('/', 'show');
+    });
+
+Route::prefix('prodi')
+    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->controller(ProdiController::class)
+    ->group(function () {
+        Route::get('/', 'index');
     });
 
 

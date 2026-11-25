@@ -2,13 +2,36 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
+use App\Models\Magang;
 use App\Models\NilaiMitra;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class NilaiMitraController extends Controller
 {
+    use AuthorizesMagangAccess;
+
+    /**
+     * Apakah pengguna yang sedang login berperan sebagai mitra.
+     */
+    private function isMitra(Request $request): bool
+    {
+        $user = $request->user();
+
+        return $user && $user->role === 'mitra';
+    }
+
+    /**
+     * Pastikan penilaian benar-benar boleh diakses user yang sedang login.
+     */
+    private function ensureCanAccess(Request $request, NilaiMitra $nilaiMitra): void
+    {
+        $this->authorizeMagangAccess($request->user(), $nilaiMitra->magang);
+    }
+
     /**
      * Tampilkan daftar penilaian mitra (dengan filter opsional).
      */
@@ -19,6 +42,9 @@ class NilaiMitraController extends Controller
             'magang.mahasiswa:mahasiswa_id,nama',
             // 'magang.mitra'
         ]);
+
+        // 🔐 Batasi data sesuai prodi Admin / kepemilikan mahasiswa / mitra.
+        $this->scopeByMagangAccess($query, $request->user(), 'magang');
 
         //  Filter by magang_id
         if ($request->query('magang_id')) {
@@ -36,11 +62,24 @@ class NilaiMitraController extends Controller
             $query->where('nilai_teknis', '<=', $request->query('max_teknis'));
         }
 
-        //  Filter by Mitra
-        if ($request->query('mitra_id')) {
+        //  Filter by Mitra (diabaikan untuk role mitra; lihat batasan di bawah)
+        if (!$this->isMitra($request) && $request->query('mitra_id')) {
             $query->whereHas('magang', function ($q) use ($request) {
                 $q->where('mitra_id', $request->query('mitra_id'));
             });
+        }
+
+        //  Mitra hanya boleh melihat penilaian miliknya sendiri.
+        if ($this->isMitra($request)) {
+            $mitraId = optional($request->user()->mitra)->mitra_id;
+
+            if ($mitraId) {
+                $query->whereHas('magang', function ($q) use ($mitraId) {
+                    $q->where('mitra_id', $mitraId);
+                });
+            } else {
+                $query->whereRaw('1 = 0');
+            }
         }
 
 
@@ -73,8 +112,23 @@ class NilaiMitraController extends Controller
      */
     public function store(Request $request)
     {
+        // Mitra hanya boleh menilai mahasiswa yang magang di perusahaannya,
+        // Admin hanya untuk prodi sendiri, Mahasiswa hanya magang sendiri.
+        // Dicek sebelum validasi agar tidak membocorkan status penilaian mitra lain.
+        if ($request->filled('magang_id')) {
+            $magang = Magang::find($request->magang_id);
+
+            if ($magang) {
+                $this->authorizeMagangAccess($request->user(), $magang);
+            }
+        }
+
         $validator = Validator::make($request->all(), [
-            'magang_id' => ['required', 'exists:magang,magang_id'],
+            'magang_id' => [
+                'required',
+                'exists:magang,magang_id',
+                Rule::unique('penilaian_mitra', 'magang_id'),
+            ],
             'nilai_teknis' => ['required', 'numeric', 'min:0', 'max:100'],
             'nilai_profesionalisme_etika' => ['required', 'numeric', 'min:0', 'max:100'],
             'nilai_komunikasi_presentasi' => ['required', 'numeric', 'min:0', 'max:100'],
@@ -116,9 +170,11 @@ class NilaiMitraController extends Controller
     /**
      * Tampilkan detail penilaian mitra.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
         $nilaiMitra = NilaiMitra::with('magang.mahasiswa')->findOrFail($id);
+
+        $this->ensureCanAccess($request, $nilaiMitra);
 
         return response()->json($nilaiMitra, 200);
     }
@@ -130,12 +186,16 @@ class NilaiMitraController extends Controller
     {
         $nilaiMitra = NilaiMitra::findOrFail($id);
 
+        $this->ensureCanAccess($request, $nilaiMitra);
+
         $validator = Validator::make($request->all(), [
             'nilai_teknis' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'nilai_profesionalisme_etika' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'nilai_komunikasi_presentasi' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'nilai_proyek_pengalaman_industri' => ['sometimes', 'numeric', 'min:0', 'max:100'],
             'keterangan' => ['nullable', 'string'],
+            'supervisor' => ['sometimes', 'string'],
+            'jabatan_supervisor' => ['sometimes', 'string'],
             'file' => ['sometimes', 'file', 'max:5000'],
         ]);
 
@@ -180,9 +240,12 @@ class NilaiMitraController extends Controller
     /**
      * Hapus penilaian mitra.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $nilaiMitra = NilaiMitra::findOrFail($id);
+
+        $this->ensureCanAccess($request, $nilaiMitra);
+
         // tambahin hapus file terlebih dahulu
         Storage::disk('public')->delete($nilaiMitra->file_path);
 

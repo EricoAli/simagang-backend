@@ -19,7 +19,7 @@ class User extends Authenticatable
         'email',
         'username',
         'password',
-        'role', // constraint roles: admin, mahasiswa, mitra, dosbing
+        'role', // constraint roles: admin, mahasiswa, mitra, dosbing, super_admin
     ];
 
     protected $hidden = [
@@ -40,6 +40,22 @@ class User extends Authenticatable
     public function username()
     {
         return 'username'; // agar Auth pakai kolom username
+    }
+
+    /**
+     * Super Admin adalah role eksplisit, bukan sekadar Admin tanpa prodi.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === 'super_admin';
+    }
+
+    /**
+     * Role yang boleh melakukan aksi administratif (Admin Prodi + Super Admin).
+     */
+    public function isAdminRole(): bool
+    {
+        return in_array($this->role, ['admin', 'super_admin'], true);
     }
 
     // 🔗 Relasi

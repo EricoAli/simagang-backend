@@ -15,6 +15,7 @@ class Dosbing extends Model
     protected $fillable = [
         'nip',
         'nama',
+        'prodi_id',
     ];
     protected $hidden = [
         'created_at',
@@ -25,5 +26,10 @@ class Dosbing extends Model
     public function magang()
     {
         return $this->hasMany(Magang::class, 'dosbing_id', 'dosbing_id');
+    }
+
+    public function prodi()
+    {
+        return $this->belongsTo(Prodi::class, 'prodi_id', 'prodi_id');
     }
 }

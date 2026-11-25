@@ -108,11 +108,10 @@ class MahasiswaProdiTest extends TestCase
             'prodi_id' => $this->prodiTRIK->prodi_id // Attempt to bypass
         ]);
 
-        $response->assertStatus(201);
-        // Should still be TRPL
-        $this->assertDatabaseHas('mahasiswa', [
+        // Manipulasi prodi_id oleh Admin Prodi ditolak dengan 403 Forbidden
+        $response->assertStatus(403);
+        $this->assertDatabaseMissing('mahasiswa', [
             'nim' => '24/12345/SV/54323',
-            'prodi_id' => $this->prodiTRPL->prodi_id
         ]);
     }
 

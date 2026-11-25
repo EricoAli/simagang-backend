@@ -18,6 +18,7 @@ class Magang extends Model
         'mitra_id',
         'supervisor_id',
         'dosbing_id',
+        'periode_id',
         'semester_magang',
         'tahun_ajaran',
         'role_magang',
@@ -36,11 +37,38 @@ class Magang extends Model
 
     protected static function booted()
     {
-        static::creating(function ($magang) {
+        static::saving(function ($magang) {
+            // Relasi master periode adalah sumber utama. Kolom lama tetap
+            // disinkronkan agar data historis dan klien lama tetap kompatibel.
+            if ($magang->periode_id) {
+                $periode = PeriodeMagang::with('tahunAjaran')
+                    ->find($magang->periode_id);
+
+                if (!$periode) {
+                    throw new \InvalidArgumentException(
+                        'Periode magang yang dipilih tidak ditemukan.'
+                    );
+                }
+
+                $magang->semester_magang = $periode->semester_magang;
+                $magang->tahun_ajaran = self::academicStartYear(
+                    $periode->tahunAjaran?->tahun_ajaran
+                );
+            } elseif ($magang->tahun_ajaran && $magang->semester_magang) {
+                $periodeId = self::resolvePeriodeId(
+                    $magang->tahun_ajaran,
+                    $magang->semester_magang
+                );
+
+                if ($periodeId) {
+                    $magang->periode_id = $periodeId;
+                }
+            }
+
             if (!$magang->tahun_ajaran) {
                 $mahasiswa = $magang->mahasiswa;
                 if (!$mahasiswa && $magang->mahasiswa_id) {
-                    $mahasiswa = \App\Models\Mahasiswa::find($magang->mahasiswa_id);
+                    $mahasiswa = Mahasiswa::find($magang->mahasiswa_id);
                 }
 
                 if ($mahasiswa && $mahasiswa->angkatan) {
@@ -48,12 +76,15 @@ class Magang extends Model
                 } else {
                     $magang->tahun_ajaran = (int) date('Y');
                 }
-            }
-        });
 
-        static::saving(function ($magang) {
-            if (!in_array($magang->semester_magang, [6, 7])) {
-                throw new \InvalidArgumentException('Semester magang hanya boleh 6 atau 7.');
+                // Setelah tahun ajaran diturunkan dari angkatan, coba petakan
+                // kembali ke master periode bila datanya tersedia.
+                if (!$magang->periode_id && $magang->semester_magang) {
+                    $magang->periode_id = self::resolvePeriodeId(
+                        $magang->tahun_ajaran,
+                        $magang->semester_magang
+                    );
+                }
             }
         });
 
@@ -74,8 +105,8 @@ class Magang extends Model
                 Storage::disk('public')->delete($magang->penilaianMitra->file_path);
             }
 
-            if ($magang->logbook?->fotoKegiatan) {
-                foreach ($magang->logbook->fotoKegiatan as $foto) {
+            foreach ($magang->logbook as $logbook) {
+                foreach ($logbook->fotoKegiatan as $foto) {
                     Storage::disk('public')->delete($foto->file_path);
                 }
             }
@@ -86,6 +117,43 @@ class Magang extends Model
     public function mahasiswa()
     {
         return $this->belongsTo(Mahasiswa::class, 'mahasiswa_id', 'mahasiswa_id');
+    }
+
+    public function periode()
+    {
+        return $this->belongsTo(PeriodeMagang::class, 'periode_id', 'periode_id');
+    }
+
+    /**
+     * Ambil empat digit tahun awal dari label tahun ajaran (2026/2027 -> 2026).
+     */
+    public static function academicStartYear(?string $tahunAjaran): ?int
+    {
+        if (!$tahunAjaran || !preg_match('/^\s*(\d{4})/', $tahunAjaran, $match)) {
+            return null;
+        }
+
+        return (int) $match[1];
+    }
+
+    /**
+     * Petakan pasangan tahun ajaran + semester ke master periode.
+     */
+    public static function resolvePeriodeId($tahunAjaran, $semester): ?int
+    {
+        if (!is_numeric($tahunAjaran) || !is_numeric($semester)) {
+            return null;
+        }
+
+        $yearStart = (int) $tahunAjaran;
+
+        return PeriodeMagang::query()
+            ->where('semester_magang', (int) $semester)
+            ->whereHas('tahunAjaran', function ($query) use ($yearStart) {
+                $query->where('tahun_ajaran', 'like', $yearStart . '/%');
+            })
+            ->orderByDesc('tahun_ajaran_id')
+            ->value('periode_id');
     }
 
     public function mitra()
@@ -115,7 +183,12 @@ class Magang extends Model
 
     public function logbook()
     {
-        return $this->hasOne(Logbook::class, 'magang_id');
+        return $this->hasMany(Logbook::class, 'magang_id', 'magang_id');
+    }
+
+    public function pesertaJadwal()
+    {
+        return $this->hasMany(JadwalPeserta::class, 'magang_id', 'magang_id');
     }
 
 

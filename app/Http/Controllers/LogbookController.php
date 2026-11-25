@@ -2,86 +2,60 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\FotoMagang;
 use App\Models\Logbook;
+use App\Models\Magang;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
-
-
-use Illuminate\Http\Request;
 
 class LogbookController extends Controller
 {
-    /**
-     * Tampilkan daftar logbook (dengan filter dan pagination).
-     */
+    use AuthorizesMagangAccess;
+
     public function index(Request $request)
     {
-        $query = Logbook::with(['fotoKegiatan', 'magang:magang_id,mahasiswa_id,semester_magang']);
+        $query = Logbook::with([
+                'fotoKegiatan',
+                'magang:magang_id,mahasiswa_id,semester_magang,tahun_ajaran,periode_id',
+                'magang.periode.tahunAjaran',
+            ])
+            ->orderByRaw('tanggal_kegiatan IS NULL')
+            ->orderByDesc('tanggal_kegiatan')
+            ->orderByDesc('logbook_id');
 
-        // 🔐 Filter otomatis untuk role mahasiswa
-        $user = auth()->user();
+        $this->scopeByMagangAccess($query, $request->user(), 'magang');
 
-        if ($user && $user->mahasiswa) {
-            // Jika user adalah mahasiswa, filter berdasarkan mahasiswa_id mereka
-            $mahasiswaId = $user->mahasiswa->mahasiswa_id;
-
-            $query->whereHas('magang', function ($q) use ($mahasiswaId) {
-                $q->where('mahasiswa_id', $mahasiswaId);
-            });
-        }
-        // Jika bukan mahasiswa (admin, pembimbing, dll), tampilkan semua logbook
-
-        // 🔎 Filter berdasarkan magang_id (opsional)
         if ($magangId = $request->query('magang_id')) {
             $query->where('magang_id', $magangId);
         }
 
-        $logbooks = $query->get();
-
-        return response()->json($logbooks, 200);
+        return response()->json($query->get(), 200);
     }
 
-    /**
-     * Tampilkan detail logbook berdasarkan id.
-     */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        try {
-            $logbook = Logbook::with(['fotoKegiatan', 'magang'])->where('logbook_id', $id)->first();
-
-
-            if (!$logbook) {
-                return response()->json(['message' => 'Logbook tidak ditemukan'], 500);
-            }
-
-
-            return response()->json([
-                'success' => true,
-                'data' => $logbook
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Logbook tidak ditemukan'
-            ], 404);
+        $logbook = Logbook::with(['fotoKegiatan', 'magang'])->find($id);
+        if (!$logbook) {
+            return response()->json(['message' => 'Logbook tidak ditemukan'], 404);
         }
+
+        $this->authorizeMagangAccess($request->user(), $logbook->magang);
+
+        return response()->json(['success' => true, 'data' => $logbook], 200);
     }
 
-    /**
-     * Simpan logbook baru.
-     */
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'magang_id' => 'required|exists:magang,magang_id',
-            'kegiatan' => 'required|string',
-            'foto' => 'required|array|min:1|max:5',
-            'foto.*' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-            'keterangan.*' => 'nullable|string|max:255',
+            'magang_id' => ['required', 'exists:magang,magang_id'],
+            'tanggal_kegiatan' => ['required', 'date'],
+            'kegiatan' => ['required', 'string', 'max:10000'],
+            'foto' => ['required', 'array', 'min:1', 'max:5'],
+            'foto.*' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
+            'keterangan.*' => ['nullable', 'string', 'max:255'],
         ], [
             'foto.required' => 'Minimal harus upload 1 foto',
             'foto.min' => 'Minimal harus upload 1 foto',
@@ -98,196 +72,157 @@ class LogbookController extends Controller
             ], 422);
         }
 
-        DB::beginTransaction();
+        $magang = Magang::findOrFail($request->magang_id);
+        $this->authorizeMagangAccess($request->user(), $magang);
 
+        $storedPaths = [];
         try {
-            $logbook = Logbook::create([
-                'magang_id' => $request->magang_id,
-                'kegiatan' => $request->kegiatan,
-            ]);
+            $logbook = DB::transaction(function () use ($request, $magang, &$storedPaths) {
+                $logbook = Logbook::create([
+                    'magang_id' => $magang->magang_id,
+                    'tanggal_kegiatan' => $request->tanggal_kegiatan,
+                    'kegiatan' => trim($request->kegiatan),
+                ]);
 
-            if ($request->has('foto')) {
-                $fotos = $request->file('foto');
-
-                foreach ($fotos as $index => $file) {
-                    $namaFileAsli = $file->getClientOriginalName();
-                    $extension = $file->getClientOriginalExtension();
-                    $namaFileTanpaExt = pathinfo($namaFileAsli, PATHINFO_FILENAME);
-                    $fileName = $namaFileTanpaExt . "_" . time() . "_" . $index . "." . $extension;
-
-                    $path = $file->storeAs("foto_kegiatan/{$request->magang_id}", $fileName, 'public');
+                foreach ($request->file('foto', []) as $file) {
+                    $path = $file->store("foto_kegiatan/{$magang->magang_id}", 'public');
+                    if (!$path) {
+                        throw new \RuntimeException('Foto gagal disimpan.');
+                    }
+                    $storedPaths[] = $path;
 
                     FotoMagang::create([
                         'logbook_id' => $logbook->logbook_id,
-                        'nama_file' => $namaFileAsli,
+                        'nama_file' => $file->getClientOriginalName(),
                         'file_path' => $path,
                     ]);
                 }
-            }
 
-            DB::commit();
+                return $logbook;
+            });
 
             return response()->json([
                 'message' => 'Logbook berhasil dibuat',
                 'data' => $logbook->load(['magang', 'fotoKegiatan']),
             ], 201);
-
-        } catch (\Throwable $th) {
-            DB::rollBack();
-
-            if (isset($logbook)) {
-                Storage::disk('public')->deleteDirectory("foto_kegiatan/{$request->magang_id}");
-            }
+        } catch (\Throwable $exception) {
+            Storage::disk('public')->delete($storedPaths);
+            report($exception);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menyimpan logbook: ' . $th->getMessage()
+                'message' => 'Gagal menyimpan logbook.',
             ], 500);
         }
-
     }
 
-    /**
-     * Update logbook.
-     */
-    public function update(Request $request, $logbook_id)
+    public function update(Request $request, $logbookId)
     {
-        // Validasi
         $validator = Validator::make($request->all(), [
-            'kegiatan' => 'required|string',
-            'delete_foto_ids' => 'nullable|array',
-            'delete_foto_ids.*' => 'exists:foto_kegiatan,foto_id',
-            'foto' => 'nullable|array|max:5',
-            'foto.*' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'tanggal_kegiatan' => ['required', 'date'],
+            'kegiatan' => ['required', 'string', 'max:10000'],
+            'delete_foto_ids' => ['nullable', 'array'],
+            'delete_foto_ids.*' => ['integer', 'distinct', 'exists:foto_kegiatan,foto_id'],
+            'foto' => ['nullable', 'array', 'max:5'],
+            'foto.*' => ['required', 'image', 'mimes:jpeg,png,jpg', 'max:2048'],
         ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validasi gagal',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
-        DB::beginTransaction();
+        $logbook = Logbook::with('magang')->findOrFail($logbookId);
+        $this->authorizeMagangAccess($request->user(), $logbook->magang);
 
+        $deleteIds = $request->input('delete_foto_ids', []);
+        $photosToDelete = FotoMagang::where('logbook_id', $logbookId)
+            ->whereIn('foto_id', $deleteIds)
+            ->get();
+        $currentCount = $logbook->fotoKegiatan()->count();
+        $newFiles = $request->file('foto', []);
+        $resultingCount = $currentCount - $photosToDelete->count() + count($newFiles);
+
+        if ($resultingCount < 1 || $resultingCount > 5) {
+            return response()->json([
+                'success' => false,
+                'message' => $resultingCount < 1
+                    ? 'Logbook harus memiliki minimal 1 foto.'
+                    : 'Total foto tidak boleh lebih dari 5.',
+            ], 422);
+        }
+
+        $storedPaths = [];
         try {
-            $logbook = Logbook::findOrFail($logbook_id);
-            $magang_id = $logbook->magang_id;
+            DB::transaction(function () use ($request, $logbook, $photosToDelete, $newFiles, &$storedPaths) {
+                $logbook->update([
+                    'tanggal_kegiatan' => $request->tanggal_kegiatan,
+                    'kegiatan' => trim($request->kegiatan),
+                ]);
 
-            // Update kegiatan
-            $logbook->update([
-                'kegiatan' => $request->kegiatan,
-            ]);
+                foreach ($photosToDelete as $foto) {
+                    $foto->delete();
+                }
 
-            // Hapus foto yang diminta untuk dihapus
-            if ($request->has('delete_foto_ids')) {
-                $fotosToDelete = FotoMagang::whereIn('foto_id', $request->delete_foto_ids)
-                    ->where('logbook_id', $logbook_id)
-                    ->get();
-
-                foreach ($fotosToDelete as $foto) {
-                    // Hapus file fisik
-                    if (Storage::disk('public')->exists($foto->file_path)) {
-                        Storage::disk('public')->delete($foto->file_path);
+                foreach ($newFiles as $file) {
+                    $path = $file->store("foto_kegiatan/{$logbook->magang_id}", 'public');
+                    if (!$path) {
+                        throw new \RuntimeException('Foto gagal disimpan.');
                     }
-                }
-
-                FotoMagang::whereIn('foto_id', $request->delete_foto_ids)
-                    ->where('logbook_id', $logbook_id)
-                    ->delete();
-            }
-
-            // Upload foto baru
-            if ($request->hasFile('foto')) {
-                // Cek total foto setelah update
-                $currentPhotoCount = FotoMagang::where('logbook_id', $logbook_id)->count();
-                $newPhotoCount = count($request->file('foto'));
-                $totalPhotos = $currentPhotoCount + $newPhotoCount;
-
-                if ($totalPhotos > 5) {
-                    throw new \Exception('Total foto tidak boleh lebih dari 5');
-                }
-
-                if ($totalPhotos < 1) {
-                    throw new \Exception('Minimal harus ada 1 foto');
-                }
-
-                $fotos = $request->file('foto');
-
-                foreach ($fotos as $index => $file) {
-                    $namaFileAsli = $file->getClientOriginalName();
-                    $extension = $file->getClientOriginalExtension();
-                    $namaFileTanpaExt = pathinfo($namaFileAsli, PATHINFO_FILENAME);
-                    $fileName = $namaFileTanpaExt . "_" . time() . "_" . $index . "." . $extension;
-
-                    $path = $file->storeAs(
-                        "foto_kegiatan/{$magang_id}",
-                        $fileName,
-                        'public'
-                    );
+                    $storedPaths[] = $path;
 
                     FotoMagang::create([
                         'logbook_id' => $logbook->logbook_id,
-                        'nama_file' => $namaFileAsli,
+                        'nama_file' => $file->getClientOriginalName(),
                         'file_path' => $path,
                     ]);
                 }
-            }
+            });
 
-            DB::commit();
+            Storage::disk('public')->delete($photosToDelete->pluck('file_path')->all());
 
             return response()->json([
                 'success' => true,
-                'message' => 'Logbook berhasil diupdate',
-                'data' => $logbook->load('fotoKegiatan')
+                'message' => 'Logbook berhasil diperbarui',
+                'data' => $logbook->fresh()->load('fotoKegiatan'),
             ], 200);
-
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Throwable $exception) {
+            Storage::disk('public')->delete($storedPaths);
+            report($exception);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal update logbook: ' . $e->getMessage()
+                'message' => 'Gagal memperbarui logbook.',
             ], 500);
         }
     }
 
-    /**
-     * Hapus logbook.
-     */
-    public function destroy($logbook_id)
+    public function destroy(Request $request, $logbookId)
     {
-        DB::beginTransaction();
+        $logbook = Logbook::with(['magang', 'fotoKegiatan'])->findOrFail($logbookId);
+        $this->authorizeMagangAccess($request->user(), $logbook->magang);
+        $paths = $logbook->fotoKegiatan->pluck('file_path')->all();
 
         try {
-            $logbook = Logbook::findOrFail($logbook_id);
-
-            $fotoKegiatan = FotoMagang::where('logbook_id', $logbook_id)->get();
-
-            foreach ($fotoKegiatan as $foto) {
-                if (Storage::disk('public')->exists($foto->file_path)) {
-                    Storage::disk('public')->delete($foto->file_path);
-                }
-            }
-
-            FotoMagang::where('logbook_id', $logbook_id)->delete();
-
-            $logbook->delete();
-
-            DB::commit();
+            DB::transaction(function () use ($logbook) {
+                $logbook->fotoKegiatan()->delete();
+                $logbook->delete();
+            });
+            Storage::disk('public')->delete($paths);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Logbook dan foto kegiatan berhasil dihapus'
+                'message' => 'Logbook dan foto kegiatan berhasil dihapus',
             ], 200);
-
-        } catch (\Throwable $th) {
-            DB::rollBack();
+        } catch (\Throwable $exception) {
+            report($exception);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus logbook: ' . $th->getMessage()
+                'message' => 'Gagal menghapus logbook.',
             ], 500);
         }
     }

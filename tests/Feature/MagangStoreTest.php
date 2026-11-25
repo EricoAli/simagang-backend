@@ -4,14 +4,16 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Mahasiswa;
-use Illuminate\Foundation\Testing\DatabaseTransactions;
+use App\Models\PeriodeMagang;
+use App\Models\TahunAjaran;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class MagangStoreTest extends TestCase
 {
-    use DatabaseTransactions;
+    use RefreshDatabase;
 
     public function test_store_magang_validation_and_creation(): void
     {
@@ -37,11 +39,23 @@ class MagangStoreTest extends TestCase
         // 2. Authenticate the user using Sanctum
         Sanctum::actingAs($user, ['*']);
 
+        $tahunAjaran = TahunAjaran::create([
+            'tahun_ajaran' => '2026/2027',
+            'is_active' => true,
+        ]);
+        $periode = PeriodeMagang::create([
+            'tahun_ajaran_id' => $tahunAjaran->tahun_ajaran_id,
+            'semester_magang' => 6,
+            'jenis_semester' => 'Genap',
+            'is_active' => true,
+        ]);
+
         // 3. Prepare files and post data
         $filePenerimaan = UploadedFile::fake()->create('penerimaan.pdf', 100, 'application/pdf');
         $filePraKRS = UploadedFile::fake()->create('krs.pdf', 100, 'application/pdf');
 
         $payload = [
+            'periode_id' => $periode->periode_id,
             'semester_magang' => 6,
             'role_magang' => 'Software Engineer',
             'jobdesk' => 'Developing features',

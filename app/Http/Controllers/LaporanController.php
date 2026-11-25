@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\Laporan;
 use App\Models\Magang;
 use Illuminate\Http\Request;
@@ -10,37 +11,16 @@ use Illuminate\Support\Facades\Validator;
 
 class LaporanController extends Controller
 {
+    use AuthorizesMagangAccess;
+
     /**
      * Display a listing of the resource.
      */
     public function index(Request $request)
     {
-        $user = $request->user();
         $query = Laporan::with('magang');
 
-        if ($user->role === 'mahasiswa') {
-            $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
-
-            if (!$mahasiswa_id) {
-                return response()->json([], 200);
-            }
-
-            $query->whereHas('magang', function ($q) use ($mahasiswa_id) {
-                $q->where('mahasiswa_id', $mahasiswa_id);
-            });
-        } elseif ($user->role === 'admin') {
-            $prodi_id = optional($user->admin)->prodi_id;
-
-            if (!$prodi_id) {
-                return response()->json([], 200);
-            }
-
-            $query->whereHas('magang.mahasiswa', function ($q) use ($prodi_id) {
-                $q->where('prodi_id', $prodi_id);
-            });
-        } else {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $this->scopeByMagangAccess($query, $request->user(), 'magang');
 
         return response()->json($query->get(), 200);
     }
@@ -71,6 +51,11 @@ class LaporanController extends Controller
                 'errors' => $validator->errors()
             ], 422);
         }
+
+        $this->authorizeMagangAccess(
+            $request->user(),
+            Magang::findOrFail($request->magang_id)
+        );
 
         // $magang = Magang::where('magang_id', $request->magang_id)
         //     ->where('mahasiswa_id', auth()->id())
@@ -110,9 +95,7 @@ class LaporanController extends Controller
     {
         $laporan = Laporan::with('magang')->findOrFail($id);
 
-        if (!$this->canAccess($request->user(), $laporan)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $this->authorizeMagangAccess($request->user(), $laporan->magang);
 
         return response()->json($laporan);
     }
@@ -136,9 +119,7 @@ class LaporanController extends Controller
 
         $laporan = Laporan::with('magang')->findOrFail($id);
 
-        if (!$this->canAccess($request->user(), $laporan)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $this->authorizeMagangAccess($request->user(), $laporan->magang);
 
         // hapus file lama
         Storage::disk('public')->delete($laporan->file_path);
@@ -167,9 +148,7 @@ class LaporanController extends Controller
     {
         $laporan = Laporan::with('magang')->findOrFail($id);
 
-        if (!$this->canAccess($request->user(), $laporan)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $this->authorizeMagangAccess($request->user(), $laporan->magang);
 
         Storage::disk('public')->delete($laporan->file_path);
         $laporan->delete();
@@ -177,24 +156,5 @@ class LaporanController extends Controller
         return response()->json([
             'message' => 'Laporan magang berhasil dihapus'
         ]);
-    }
-
-    /**
-     * Cek apakah user berhak mengakses laporan.
-     */
-    private function canAccess($user, Laporan $laporan): bool
-    {
-        if ($user->role === 'admin') {
-            $prodi_id = optional($user->admin)->prodi_id;
-
-            return $prodi_id
-                && optional($laporan->magang->mahasiswa)->prodi_id === $prodi_id;
-        }
-
-        $mahasiswa_id = optional($user->mahasiswa)->mahasiswa_id;
-
-        return $mahasiswa_id
-            && $laporan->magang
-            && $laporan->magang->mahasiswa_id === $mahasiswa_id;
     }
 }

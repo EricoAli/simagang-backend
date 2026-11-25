@@ -17,6 +17,8 @@ class Mitra extends Model
         'user_id',
         'email',
         'narahubung',
+        'alamat',
+        'telepon',
     ];
 
     protected $hidden = [

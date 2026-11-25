@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\FotoMagang;
+use App\Models\Logbook;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 
@@ -10,12 +12,17 @@ use Illuminate\Http\Request;
 
 class FotoMagangController extends Controller
 {
+    use AuthorizesMagangAccess;
+
     /**
      * Tampilkan daftar foto kegiatan
      */
     public function index(Request $request)
     {
         $query = FotoMagang::with('logbook');
+
+        // 🔐 Batasi data sesuai prodi Admin / kepemilikan mahasiswa / mitra.
+        $this->scopeByMagangAccess($query, $request->user(), 'logbook.magang');
 
         // Filter berdasarkan logbook_id
         if ($logbookId = $request->query('logbook_id')) {
@@ -33,9 +40,12 @@ class FotoMagangController extends Controller
     /**
      * Detail foto kegiatan
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
-        $foto = FotoMagang::with('logbook')->findOrFail($id);
+        $foto = FotoMagang::with('logbook.magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), optional($foto->logbook)->magang);
+
         return response()->json($foto, 200);
     }
 
@@ -58,15 +68,18 @@ class FotoMagangController extends Controller
             ], 422);
         }
 
+        $logbook = Logbook::with('magang')->findOrFail($request->logbook_id);
+
+        $this->authorizeMagangAccess($request->user(), $logbook->magang);
+
         // Simpan file
         $path = $request->file('file')->store('foto_magang', 'public');
 
         $foto = FotoMagang::create([
             'logbook_id' => $request->logbook_id,
             'nama_file' => $request->file('file')->getClientOriginalName(),
-            'path_file' => $path,
+            'file_path' => $path,
             'keterangan' => $request->keterangan,
-            'uploaded_at' => now(),
         ]);
 
         return response()->json([
@@ -80,7 +93,9 @@ class FotoMagangController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $foto = FotoMagang::findOrFail($id);
+        $foto = FotoMagang::with('logbook.magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), optional($foto->logbook)->magang);
 
         $rules = [
             'file' => ['nullable', 'file', 'mimes:jpg,jpeg,png', 'max:2048'],
@@ -97,8 +112,8 @@ class FotoMagangController extends Controller
 
         // Jika ada file baru, hapus file lama lalu simpan yang baru
         if ($request->hasFile('file')) {
-            if ($foto->path_file && Storage::disk('public')->exists($foto->path_file)) {
-                Storage::disk('public')->delete($foto->path_file);
+            if ($foto->file_path && Storage::disk('public')->exists($foto->file_path)) {
+                Storage::disk('public')->delete($foto->file_path);
             }
 
             $path = $request->file('file')->store('foto_magang', 'public');
@@ -123,13 +138,15 @@ class FotoMagangController extends Controller
     /**
      * Hapus foto kegiatan
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
-        $foto = FotoMagang::findOrFail($id);
+        $foto = FotoMagang::with('logbook.magang')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), optional($foto->logbook)->magang);
 
         // Hapus file fisik
-        if ($foto->path_file && Storage::disk('public')->exists($foto->path_file)) {
-            Storage::disk('public')->delete($foto->path_file);
+        if ($foto->file_path && Storage::disk('public')->exists($foto->file_path)) {
+            Storage::disk('public')->delete($foto->file_path);
         }
 
         $foto->delete();

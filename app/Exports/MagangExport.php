@@ -18,12 +18,20 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
 
     protected $angkatan;
     protected $semesterMagang;
+    protected $mitraId;
+    protected $prodiId;
+    protected $mahasiswaId;
+    protected $periodeId;
     protected $row = 1;
 
-    public function __construct($angkatan = null, $semesterMagang = null)
+    public function __construct($angkatan = null, $semesterMagang = null, $mitraId = null, $prodiId = null, $mahasiswaId = null, $periodeId = null)
     {
         $this->angkatan = $angkatan;
         $this->semesterMagang = $semesterMagang;
+        $this->mitraId = $mitraId;
+        $this->prodiId = $prodiId;
+        $this->mahasiswaId = $mahasiswaId;
+        $this->periodeId = $periodeId;
     }
     public function collection()
     {
@@ -47,6 +55,24 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
 
         if ($this->semesterMagang) {
             $query->where('semester_magang', $this->semesterMagang);
+        }
+
+        if ($this->periodeId) {
+            $query->where('periode_id', $this->periodeId);
+        }
+
+        if ($this->mitraId) {
+            $query->where('mitra_id', $this->mitraId);
+        }
+
+        if ($this->prodiId) {
+            $query->whereHas('mahasiswa', function ($q) {
+                $q->where('prodi_id', $this->prodiId);
+            });
+        }
+
+        if ($this->mahasiswaId) {
+            $query->where('mahasiswa_id', $this->mahasiswaId);
         }
 
         return $query->get();
@@ -86,11 +112,8 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
 
         // Foto logbook
         $fotoUrls = [];
-        $logbook = $magang->logbook?->first();
-        if ($logbook && $logbook->fotoKegiatan && $logbook->fotoKegiatan->count() > 0) {
-            foreach ($logbook->fotoKegiatan->take(5) as $foto) {
-                $fotoUrls[] = $foto->file_path ? $baseUrl . $foto->file_path : '-';
-            }
+        foreach ($magang->logbook->flatMap(fn ($entry) => $entry->fotoKegiatan)->take(5) as $foto) {
+            $fotoUrls[] = $foto->file_path ? $baseUrl . $foto->file_path : '-';
         }
         while (count($fotoUrls) < 5) {
             $fotoUrls[] = '-';

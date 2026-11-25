@@ -39,7 +39,17 @@ class Mahasiswa extends Model
 
     public function magang()
     {
-        return $this->hasMany(Magang::class, 'mahasiswa_id', 'mahasiswa_id');
+        // Riwayat magang selalu terurut dari periode terbaru agar halaman
+        // detail mahasiswa konsisten saat menampilkan riwayat per periode.
+        return $this->hasMany(Magang::class, 'mahasiswa_id', 'mahasiswa_id')
+            ->orderByDesc('tahun_ajaran')
+            ->orderByDesc('semester_magang')
+            ->orderByDesc('magang_id');
+    }
+
+    public function pesertaJadwal()
+    {
+        return $this->hasMany(JadwalPeserta::class, 'mahasiswa_id', 'mahasiswa_id');
     }
 
     public static function booted()

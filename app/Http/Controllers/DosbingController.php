@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\Dosbing;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -12,12 +13,22 @@ use Illuminate\Http\Request;
 
 class DosbingController extends Controller
 {
+    use AuthorizesMagangAccess;
+
     /**
      * Tampilkan daftar dosen pembimbing
      */
     public function index(Request $request)
     {
-        $query = Dosbing::query();
+        $query = Dosbing::with('prodi');
+
+        if ($request->user()?->role === 'admin') {
+            $prodiId = (int) optional($request->user()->admin)->prodi_id;
+            if (!$prodiId) {
+                abort(403, 'Admin tidak memiliki program studi.');
+            }
+            $query->where('prodi_id', $prodiId);
+        }
 
         // Filter berdasarkan nama
         if ($search = $request->query('q')) {
@@ -45,9 +56,20 @@ class DosbingController extends Controller
      */
     public function store(Request $request)
     {
+        $user = $request->user();
+        if ($user?->role === 'admin') {
+            $prodiId = (int) optional($user->admin)->prodi_id;
+            if (!$prodiId) {
+                abort(403, 'Admin tidak memiliki program studi.');
+            }
+            // Server owns the Admin's prodi; ignore a submitted cross-prodi ID.
+            $request->merge(['prodi_id' => $prodiId]);
+        }
+
         $rules = [
             'nip' => ['required', 'string', 'numeric', 'digits:18', 'unique:dosen_pembimbing,nip'],
             'nama' => ['required', 'string', 'max:150'],
+            'prodi_id' => ['required', 'integer', 'exists:prodi,prodi_id'],
         ];
 
         $messages = [
@@ -84,9 +106,20 @@ class DosbingController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $user = $request->user();
+        $dosbing = Dosbing::findOrFail($id);
+        if ($user?->role === 'admin') {
+            $prodiId = (int) optional($user->admin)->prodi_id;
+            if (!$prodiId || (int) $dosbing->prodi_id !== $prodiId) {
+                abort(403, 'Admin Prodi hanya dapat mengelola dosen dari program studinya.');
+            }
+            $request->merge(['prodi_id' => $prodiId]);
+        }
+
         $rules = [
             'nip' => ['required', 'string', 'numeric', 'digits:18', 'unique:dosen_pembimbing,nip,' . $id . ',dosbing_id'],
             'nama' => ['required', 'string', 'max:150'],
+            'prodi_id' => ['required', 'integer', 'exists:prodi,prodi_id'],
         ];
 
         $messages = [
@@ -96,7 +129,6 @@ class DosbingController extends Controller
         ];
 
         try {
-            $dosbing = Dosbing::findOrFail($id);
             $validator = Validator::make($request->all(), $rules, $messages);
             
             if ($validator->fails()) {
@@ -123,9 +155,15 @@ class DosbingController extends Controller
     /**
      * Hapus dosen pembimbing
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $dosbing = Dosbing::findOrFail($id);
+        if ($request->user()?->role === 'admin') {
+            $prodiId = (int) optional($request->user()->admin)->prodi_id;
+            if (!$prodiId || (int) $dosbing->prodi_id !== $prodiId) {
+                abort(403, 'Admin Prodi hanya dapat mengelola dosen dari program studinya.');
+            }
+        }
         $dosbing->delete();
 
         return response()->json([
@@ -133,9 +171,12 @@ class DosbingController extends Controller
         ], 200);
     }
 
-    public function getDosbingByMagangId($id)
+    public function getDosbingByMagangId(Request $request, $id)
     {
-        $magang = Magang::where('magang_id', $id)->first();
+        $magang = Magang::with('mahasiswa')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), $magang);
+
         $dosbingId = $magang->dosbing_id;
         $dosbing = Dosbing::where('dosbing_id', $dosbingId)->first();
         return response()->json($dosbing, 200);

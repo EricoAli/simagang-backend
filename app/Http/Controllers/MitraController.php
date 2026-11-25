@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AuthorizesMagangAccess;
 use App\Models\Mitra;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use App\Models\Magang;
 use App\Models\User;
@@ -13,6 +15,8 @@ use Illuminate\Http\Request;
 
 class MitraController extends Controller
 {
+    use AuthorizesMagangAccess;
+
     /**
      * Tampilkan daftar mitra (dengan pagination dan pencarian sederhana).
      */
@@ -53,9 +57,11 @@ class MitraController extends Controller
     public function store(Request $request)
     {
         $rules = [
-            'nama_mitra' => ['required', 'string', 'max:255', 'unique:mitra,nama_mitra'],
-            'email' => ['required', 'email', 'max:255', 'unique:mitra,email'],
-            'narahubung' => ['nullable', 'string'],
+            'nama_mitra' => ['required', 'string', 'max:150', 'unique:mitra,nama_mitra'],
+            'email' => ['required', 'email', 'max:100', 'unique:mitra,email'],
+            'narahubung' => ['nullable', 'string', 'max:100'],
+            'alamat' => ['nullable', 'string', 'max:255'],
+            'telepon' => ['nullable', 'string', 'max:50'],
         ];
 
         $messages = [
@@ -69,27 +75,30 @@ class MitraController extends Controller
             return response()->json([
                 'title' => 'Validasi Gagal',
                 'message' => collect($validator->errors()->all())->first(),
+                'errors' => $validator->errors(),
             ], 422);
         }
 
+        $data = $validator->validated();
+
         try {
-            $data = $validator->validated();
+            $mitra = DB::transaction(function () use ($data) {
+                $username = Str::before($data['email'], '@');
 
-            $username = Str::before($data['email'], '@');
+                $user = User::firstOrCreate(
+                    ['email' => $data['email']],
+                    [
+                        'email' => $data['email'],
+                        'username' => $username,
+                        'password' => $username,
+                        'role' => 'mitra',
+                    ]
+                );
 
-            $user = User::firstOrCreate(
-                ['email' => $data['email']],
-                [
-                    'email' => $data['email'],
-                    'username' => $username,
-                    'password' => $username,
-                    'role' => 'mitra',
-                ]
-            );
+                $data['user_id'] = $user->user_id;
 
-            $data['user_id'] = $user->user_id;
-
-            $mitra = Mitra::create($data);
+                return Mitra::create($data)->fresh();
+            });
 
             return response()->json([
                 'message' => 'Mitra berhasil dibuat',
@@ -98,7 +107,7 @@ class MitraController extends Controller
 
         } catch (\Throwable $th) {
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Gagal menyimpan data Mitra.',
             ], 500);
         }
     }
@@ -108,10 +117,13 @@ class MitraController extends Controller
      */
     public function update(Request $request, $id)
     {
+        $mitra = Mitra::findOrFail($id);
         $rules = [
-            'nama_mitra' => ['required', 'string', 'max:255', 'unique:mitra,nama_mitra,' . $id . ',mitra_id'],
-            'email' => ['required', 'email', 'max:255'],
-            'narahubung' => ['nullable', 'string'],
+            'nama_mitra' => ['required', 'string', 'max:150', Rule::unique('mitra', 'nama_mitra')->ignore($mitra->mitra_id, 'mitra_id')],
+            'email' => ['required', 'email', 'max:100', Rule::unique('mitra', 'email')->ignore($mitra->mitra_id, 'mitra_id')],
+            'narahubung' => ['nullable', 'string', 'max:100'],
+            'alamat' => ['nullable', 'string', 'max:255'],
+            'telepon' => ['nullable', 'string', 'max:50'],
         ];
 
         $messages = [
@@ -119,29 +131,29 @@ class MitraController extends Controller
             'email.email' => 'Format email tidak valid',
         ];
 
+        $validator = Validator::make($request->all(), $rules, $messages);
+        if ($validator->fails()) {
+            return response()->json([
+                'title' => 'Validasi Gagal',
+                'message' => collect($validator->errors()->all())->first(),
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+
         try {
-            $mitra = Mitra::findOrFail($id);
-            $validator = Validator::make($request->all(), $rules, $messages);
-    
-            if ($validator->fails()) {
-                return response()->json([
-                    'title' => "Validasi Gagal",
-                    'message' => collect($validator->errors()->all())->first(),
-                ], 422);
-            }
-    
-            $data = $validator->validated();
-    
-            $mitra->update($data);
-    
+            DB::transaction(function () use ($mitra, $data) {
+                $mitra->update($data);
+            });
+
             return response()->json([
                 'message' => 'Mitra berhasil diperbarui',
-                'data' => $mitra->fresh()->load(['magang'])
+                'data' => $mitra->fresh()->load(['magang']),
             ], 200);
-
         } catch (\Throwable $th) {
             return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Gagal menyimpan perubahan data mitra.',
             ], 500);
         }
 
@@ -165,9 +177,12 @@ class MitraController extends Controller
 
     }
 
-    public function getMitraByMagang($id)
+    public function getMitraByMagang(Request $request, $id)
     {
-        $magang = Magang::where('magang_id', $id)->first();
+        $magang = Magang::with('mahasiswa')->findOrFail($id);
+
+        $this->authorizeMagangAccess($request->user(), $magang);
+
         $mitraId = $magang->mitra_id;
         $mitra = Mitra::where('mitra_id', $mitraId)->first();
         return response()->json($mitra, 200);

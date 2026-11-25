@@ -29,6 +29,12 @@ class RoleMiddleware
             return $next($request);
         }
 
+        // Super Admin mewarisi seluruh route yang mengizinkan Admin,
+        // tetapi tidak otomatis mendapat route khusus Mahasiswa/Mitra.
+        if ($user->role === 'super_admin' && in_array('admin', $roles, true)) {
+            return $next($request);
+        }
+
         // Periksa apakah role user sesuai salah satu role yang diberikan
         if (!in_array($user->role, $roles)) {
             abort(403, 'Unauthorized');

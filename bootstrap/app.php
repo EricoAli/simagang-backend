@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.api' => \App\Http\Middleware\ApiAuthenticate::class,
             'token.check' => \App\Http\Middleware\TokenCheck::class,
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'master-data.manager' => \App\Http\Middleware\EnsureMasterDataManager::class,
+            'master-period.super-admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
         ]);
     })
 

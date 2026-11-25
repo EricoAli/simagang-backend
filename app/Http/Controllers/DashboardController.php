@@ -15,18 +15,83 @@ use App\Models\Mitra;
 
 class DashboardController extends Controller
 {
-    public function fetchDashboardDataAdmin()
+    public function fetchDashboardDataAdmin(Request $request)
     {
-        $SemesterMagangTerbaru = Magang::latest('semester_magang')->value('semester_magang');
+        $user = $request->user();
 
-        if ($SemesterMagangTerbaru) {
-            $jumlahMagangAktif = Magang::where('semester_magang', $SemesterMagangTerbaru)
-                ->count();
-        } else {
-            $jumlahMagangAktif = 0;
+        // Hanya Admin Prodi / Super Admin yang boleh melihat dashboard admin.
+        if (!$user || !in_array($user->role, ['admin', 'super_admin'], true)) {
+            abort(403, 'Anda tidak berhak mengakses dashboard admin.');
         }
 
-        $jumlahMahasiswa = Mahasiswa::count();
+        $prodiId = null;
+        $adminWithoutProdi = false;
+
+        // Admin Prodi: hanya data prodinya. Super Admin: agregat seluruh prodi.
+        if ($user->role === 'admin') {
+            $prodiId = optional($user->admin)->prodi_id;
+            $adminWithoutProdi = !$prodiId;
+        }
+
+        $magangQuery = Magang::query();
+        $mahasiswaQuery = Mahasiswa::query();
+        $aktivitasQuery = Magang::query()
+            ->with(['mahasiswa.prodi', 'mitra'])
+            ->whereHas('mahasiswa')
+            ->whereIn('status_magang', ['berlangsung', 'selesai']);
+
+        if ($adminWithoutProdi) {
+            // Admin tanpa prodi tetap tidak mendapat data apa pun.
+            $jumlahMagangAktif = 0;
+            $jumlahMahasiswa = 0;
+        } else {
+            if ($prodiId) {
+                $mahasiswaQuery->where('prodi_id', $prodiId);
+                $magangQuery->whereHas('mahasiswa', function ($q) use ($prodiId) {
+                    $q->where('prodi_id', $prodiId);
+                });
+                $aktivitasQuery->whereHas('mahasiswa', function ($q) use ($prodiId) {
+                    $q->where('prodi_id', $prodiId);
+                });
+            }
+
+            $SemesterMagangTerbaru = (clone $magangQuery)
+                ->latest('semester_magang')
+                ->value('semester_magang');
+
+            $jumlahMagangAktif = $SemesterMagangTerbaru
+                ? (clone $magangQuery)->where('semester_magang', $SemesterMagangTerbaru)->count()
+                : 0;
+
+            $jumlahMahasiswa = $mahasiswaQuery->count();
+        }
+
+        $aktivitasTerbaru = $adminWithoutProdi
+            ? collect()
+            : $aktivitasQuery
+                ->orderByDesc('updated_at')
+                ->orderByDesc('magang_id')
+                ->limit(5)
+                ->get()
+                ->map(function (Magang $magang) {
+                    $mahasiswa = $magang->mahasiswa;
+                    $prodi = $mahasiswa?->prodi;
+
+                    return [
+                        'magang_id' => $magang->magang_id,
+                        'nama_mahasiswa' => $mahasiswa?->nama,
+                        'nim' => $mahasiswa?->nim,
+                        'kode_prodi' => $prodi?->kode_prodi,
+                        'nama_prodi' => $prodi?->nama_prodi,
+                        'nama_mitra' => $magang->mitra?->nama_mitra,
+                        'tanggal_mulai' => $magang->tanggal_mulai,
+                        'tanggal_selesai' => $magang->tanggal_selesai,
+                        'status_magang' => $magang->status_magang,
+                        // Magang tidak memiliki timestamp perubahan status khusus.
+                        'updated_at' => $magang->updated_at,
+                    ];
+                })
+                ->values();
 
         // 2. Hitung mitra
         $jumlahMitra = Mitra::count();
@@ -40,13 +105,20 @@ class DashboardController extends Controller
             'jumlah_mahasiswa' => $jumlahMahasiswa,
             'jumlah_mitra' => $jumlahMitra,
             'jumlah_dosbing' => $jumlahDosbing,
+            'aktivitas_terbaru' => $aktivitasTerbaru,
         ], 200);
     }
 
     public function fetchDashboardDataMitra()
     {
         // Hitung jumlah mahasiswa magang untuk mitra yang sedang login
-        $mitraId = auth()->user()->mitra->mitra_id;
+        $user = auth()->user();
+
+        if (!$user || $user->role !== 'mitra' || !$user->mitra) {
+            abort(403, 'Anda tidak berhak mengakses dashboard mitra.');
+        }
+
+        $mitraId = $user->mitra->mitra_id;
 
         $jumlahMahasiswaMagangByMitra = Magang::where('mitra_id', $mitraId)
             ->distinct('mahasiswa_id')
@@ -71,7 +143,10 @@ class DashboardController extends Controller
         // 1. Ambil Mahasiswa ID dari Auth
         // Pastikan relasi 'mahasiswa' ada di model User
         $user = auth()->user();
-        if (!$user || !$user->mahasiswa) {
+        if (!$user || $user->role !== 'mahasiswa') {
+            return response()->json(['message' => 'Anda tidak berhak mengakses dashboard mahasiswa.'], 403);
+        }
+        if (!$user->mahasiswa) {
             return response()->json(['message' => 'Data mahasiswa tidak ditemukan'], 404);
         }
         $mahasiswaId = $user->mahasiswa->mahasiswa_id;
