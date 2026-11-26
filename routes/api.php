@@ -19,7 +19,10 @@ use App\Http\Controllers\FotoMagangController;
 use App\Http\Controllers\NilaiMitraController;
 use App\Http\Controllers\SupervisorController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PeriodeMagangController;
+use App\Http\Controllers\ProdiController;
 use App\Http\Controllers\SuperAdminController;
+use App\Http\Controllers\TahunAjaranController;
 
 
 
@@ -34,7 +37,7 @@ Route::get('/user', function (Request $request) {
 
 
 Route::prefix('user')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(UserController::class)->group(function () {
         Route::get('/', 'getUser');
         Route::put('/password', 'password');
@@ -188,13 +191,18 @@ Route::prefix('jadwal-presentasi')
 |--------------------------------------------------------------------------
 */
 Route::prefix('dosbing')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(DosbingController::class)->group(function () {
         Route::get('/magang/{id}', 'getDosbingByMagangId');
         Route::get('/jumlah', 'jumlahDosbing');
         Route::get('/', 'index');
-        Route::post('/', 'store');
         Route::get('/{id}', 'show');
+    });
+
+Route::prefix('dosbing')
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin'])
+    ->controller(DosbingController::class)->group(function () {
+        Route::post('/', 'store');
         Route::put('/{id}', 'update');
         Route::delete('/{id}', 'destroy');
     });
@@ -250,6 +258,51 @@ Route::prefix('penilaian-mitra')
 
 
 
+Route::prefix('prodi')
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
+    ->controller(ProdiController::class)->group(function () {
+        Route::get('/', 'index');
+    });
+
+
+/*
+|--------------------------------------------------------------------------
+| Master Tahun Ajaran & Periode Magang Routes
+|--------------------------------------------------------------------------
+*/
+Route::prefix('tahun-ajaran')
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
+    ->controller(TahunAjaranController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::get('/{id}', 'show')->whereNumber('id');
+    });
+
+Route::prefix('tahun-ajaran')
+    ->middleware(['auth.api:sanctum', 'role:super_admin'])
+    ->controller(TahunAjaranController::class)->group(function () {
+        Route::post('/', 'store');
+        Route::put('/{id}', 'update')->whereNumber('id');
+        Route::patch('/{id}/status', 'toggleStatus')->whereNumber('id');
+        Route::delete('/{id}', 'destroy')->whereNumber('id');
+    });
+
+Route::prefix('periode-magang')
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
+    ->controller(PeriodeMagangController::class)->group(function () {
+        Route::get('/', 'index');
+        Route::get('/{id}', 'show')->whereNumber('id');
+    });
+
+Route::prefix('periode-magang')
+    ->middleware(['auth.api:sanctum', 'role:super_admin'])
+    ->controller(PeriodeMagangController::class)->group(function () {
+        Route::post('/', 'store');
+        Route::put('/{id}', 'update')->whereNumber('id');
+        Route::patch('/{id}/status', 'toggleStatus')->whereNumber('id');
+        Route::delete('/{id}', 'destroy')->whereNumber('id');
+    });
+
+
 /**
  * -----------------------------------------------------------------------
  * Angakatan Routes
@@ -257,7 +310,7 @@ Route::prefix('penilaian-mitra')
  */
 
 Route::prefix('angkatan')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(AngkatanController::class)
     ->group(function () {
         Route::get('/', 'show');
@@ -271,7 +324,7 @@ Route::prefix('angkatan')
  */
 
 Route::prefix('dashboard')
-    ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing'])
+    ->middleware(['auth.api:sanctum', 'role:admin,super_admin,mahasiswa,mitra,dosbing'])
     ->controller(DashboardController::class)
     ->group(function () {
         Route::get('/admin', 'fetchDashboardDataAdmin');
