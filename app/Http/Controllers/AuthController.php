@@ -78,7 +78,7 @@ class AuthController extends Controller
             'access_token' => $token,
             'role' => $user->role,
             'is_super_admin' => $user->role === 'super_admin',
-            'user' => $user->load('mitra', 'mahasiswa.prodi', 'admin.prodi'),
+            'user' => $user->load('mitra', 'mahasiswa.prodi', 'admin.prodi', 'dosbing.prodi'),
             'token_type' => 'Bearer',
             'expires_at' => $token_expired,
         ]);

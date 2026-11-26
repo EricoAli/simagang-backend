@@ -94,7 +94,7 @@
 
 ## 4. Create Magang (Pendaftaran)
 
-**Status:** CONFLICTING (Forces `doc_pra_krs` which PM docs say is out of scope. Hardcodes semester 6 and 7).
+**Status:** CONFLICTING (Mahasiswa wajib mengunggah `doc_pra_krs`; dokumen PM menyatakan di luar scope).
 
 - **HTTP Method:** `POST`
 - **Endpoint:** `/api/magang`
@@ -105,11 +105,11 @@
 | Field | Type | Description |
 |-------|------|-------------|
 | `mitra_id` | integer | (Optional) ID of Mitra. |
-| `semester_magang` | integer | **Must be 6 or 7.** |
+| `semester_magang` | integer | Opsional; divalidasi terhadap master periode bila tersedia. |
 | `role_magang` | string | (Optional) |
 | `jobdesk` | string | (Optional) |
-| `dokumenPenerimaan` | file (pdf) | **Required.** Max 5MB. |
-| `dokumenPraKRS` | file (pdf) | **Required.** Max 5MB. (CONFLICT: Requirement says out of scope). |
+| `dokumenPenerimaan` | file (pdf) | **Wajib untuk mahasiswa.** Opsional untuk Admin. Max 5MB. |
+| `dokumenPraKRS` | file (pdf) | **Wajib untuk mahasiswa.** Opsional untuk Admin. Max 5MB. (CONFLICT: Requirement says out of scope). |
 
 ### Response (Success)
 - **Status Code:** `201 Created`
@@ -117,7 +117,7 @@
 ### Response (Error)
 - **Status Code:** `422 Unprocessable Entity` (Validation failure)
 
-**Implementation Note:** Crashes if called by Admin because it explicitly assigns `mahasiswa_id` via `$request->user()->mahasiswa->mahasiswa_id`.
+**Implementation Note:** Admin membuat penempatan untuk mahasiswa lain dan wajib mengirim `mahasiswa_id`; mahasiswa memakai data miliknya sendiri.
 
 ---
 
@@ -134,30 +134,70 @@
 | `mahasiswa_id` | integer | (Optional) |
 | `mitra_id` | integer | (Optional) |
 | `dosbing_id` | integer | (Optional) |
-| `semester_magang` | integer | (Optional) Must be 6 or 7. |
-| `status_magang` | string | (Optional) `draft`, `berlangsung`, `selesai`, `ditolak`. |
+| `semester_magang` | integer | (Optional) Harus sesuai periode master bila diisi. |
+| `status_magang` | string | (Optional, hanya Admin/Super Admin) `draft`, `berlangsung`, `selesai`. Nilai lama `ditolak` hanya dipertahankan untuk data historis. |
+
+> Update yang hanya mengirim `status_magang` tidak mengubah `periode_id`,
+> `semester_magang`, `tahun_ajaran`, maupun relasi mahasiswa/mitra/dosbing.
+> Data legacy tanpa `periode_id` juga tidak di-backfill otomatis oleh update
+> status.
 
 ### Response (Success)
 - **Status Code:** `200 OK`
 
 ---
 
-## 6. Delete Magang
+## 6. Delete Magang (Batalkan Pendaftaran Draft)
 
 - **HTTP Method:** `DELETE`
 - **Endpoint:** `/api/magang/{id}`
-- **Purpose:** Delete a magang record.
+- **Purpose:** Membatalkan pendaftaran magang yang masih berstatus `draft`.
 - **Authentication:** Bearer Token (Sanctum)
+
+### Authorization
+| Role | Kewenangan |
+|---|---|
+| Super Admin | Boleh menghapus `draft` lintas prodi. |
+| Admin Prodi | Boleh menghapus `draft` hanya pada prodi sendiri. |
+| Mahasiswa | Boleh membatalkan `draft` miliknya sendiri. |
+| Mitra | Ditolak `403`. |
+| Dosen Pembimbing | Ditolak `403`. |
+
+### Business Rules
+1. Hanya status `draft` (Belum Mulai) yang boleh dihapus. Status `berlangsung`, `selesai`, dan `ditolak` ditolak dengan `422`.
+2. Penghapusan ditolak `422` apabila masih terdapat data turunan:
+   - dokumen magang,
+   - logbook/foto kegiatan,
+   - laporan magang,
+   - penilaian mitra,
+   - peserta jadwal presentasi.
+3. Penghapusan hanya menghapus baris `magang`. Tidak ada cascade delete terhadap data turunan; data turunan harus kosong terlebih dahulu.
+4. Sesi `jadwal_presentasi` tidak ikut dihapus dan tidak boleh kehilangan peserta secara tidak sengaja.
+5. Data magang lain milik mahasiswa yang sama (periode lain) tidak terpengaruh.
 
 ### Response (Success)
 - **Status Code:** `200 OK`
-- **Body Example:**
 ```json
 {
   "message": "Data magang berhasil dihapus"
 }
 ```
-**Implementation Note:** Lacks ownership validation. Any user can delete any magang record.
+
+### Response (Error)
+- `403 Forbidden` — role tidak berwenang atau data di luar prodi/kepemilikan.
+- `404 Not Found` — data tidak ditemukan atau sudah dihapus.
+- `422 Unprocessable Entity` — status bukan `draft` atau masih ada data turunan.
+```json
+{
+  "message": "Data magang tidak dapat dihapus karena masih memiliki data turunan: logbook/foto kegiatan.",
+  "errors": {
+    "relations": ["logbook/foto kegiatan"]
+  }
+}
+```
+- `500 Internal Server Error` — kegagalan tak terduga dengan pesan umum (detail tidak dibocorkan).
+
+**Implementation Note:** Validasi status, kepemilikan/prodi, dan relasi turunan dilakukan di backend sebelum transaksi penghapusan. Hook `Magang::deleting` tidak dijalankan pada alur ini agar tidak ada file yang terhapus sebelum transaksi berhasil.
 
 ---
 

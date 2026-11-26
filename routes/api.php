@@ -189,6 +189,7 @@ Route::prefix('jadwal-presentasi')
     ->controller(JadwalPresentasiController::class)->group(function () {
         Route::get('/', 'index');
         Route::post('/', 'store');
+        Route::get('/advisees', 'advisees');
         Route::get('/{id}/peserta', 'peserta');
         Route::get('/{id}/mahasiswa-eligible', 'eligiblePeserta');
         Route::post('/{id}/peserta', 'tambahPeserta');

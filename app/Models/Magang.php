@@ -38,6 +38,18 @@ class Magang extends Model
     protected static function booted()
     {
         static::saving(function ($magang) {
+            // Sinkronisasi periode hanya diperlukan saat data dibuat atau
+            // ketika salah satu field periode memang diubah. Update status
+            // (atau field lain) tidak boleh menulis ulang periode, melakukan
+            // backfill periode_id, atau menggagalkan data legacy.
+            $periodeAttributes = ['periode_id', 'semester_magang', 'tahun_ajaran'];
+            $shouldSyncPeriode = !$magang->exists
+                || $magang->isDirty($periodeAttributes);
+
+            if (!$shouldSyncPeriode) {
+                return;
+            }
+
             // Relasi master periode adalah sumber utama. Kolom lama tetap
             // disinkronkan agar data historis dan klien lama tetap kompatibel.
             if ($magang->periode_id) {

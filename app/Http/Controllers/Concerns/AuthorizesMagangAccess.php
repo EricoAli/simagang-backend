@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Models\Dosbing;
 use App\Models\Magang;
 use App\Models\Mahasiswa;
 
@@ -11,7 +12,13 @@ use App\Models\Mahasiswa;
  * - Admin : hanya mahasiswa pada prodi Admin (Admin tanpa prodi ditolak).
  * - Mahasiswa : hanya magang miliknya sendiri.
  * - Mitra : hanya magang mahasiswa pada mitra tersebut.
- * - Dosbing : ditolak karena akun dosbing belum terhubung ke data dosen pembimbing.
+ * - Dosbing : ditolak pada data turunan magang yang bersifat umum. Akses
+ *   dosbing hanya dibuka secara eksplisit oleh controller penjadwalan
+ *   presentasi untuk mahasiswa bimbingannya.
+ *
+ * Akun dosbing dihubungkan ke master dosen pembimbing melalui
+ * dosen_pembimbing.user_id. Untuk kompatibilitas akun lama, username yang
+ * sama dengan NIP juga dikenali sebagai tautan legacy (lihat dosbingForUser).
  */
 trait AuthorizesMagangAccess
 {
@@ -46,6 +53,34 @@ trait AuthorizesMagangAccess
         $prodiId = optional($user->admin)->prodi_id;
 
         return $prodiId ? (int) $prodiId : null;
+    }
+
+    /**
+     * Data dosen pembimbing milik akun dosbing yang sedang login.
+     *
+     * Tautan utama adalah dosen_pembimbing.user_id. Bila akun lama belum
+     * memiliki user_id, username yang sama dengan NIP tetap dikenali agar
+     * data yang sudah berjalan tidak langsung kehilangan akses.
+     */
+    protected function dosbingForUser($user): ?Dosbing
+    {
+        if (!$user || $user->role !== 'dosbing') {
+            return null;
+        }
+
+        $dosbing = Dosbing::where('user_id', $user->user_id)->first();
+
+        if ($dosbing) {
+            return $dosbing;
+        }
+
+        $username = trim((string) $user->username);
+
+        if ($username === '') {
+            return null;
+        }
+
+        return Dosbing::where('nip', $username)->first();
     }
 
     /**
@@ -106,7 +141,9 @@ trait AuthorizesMagangAccess
                     && (int) $magang->mitra_id === (int) $mitraId;
 
             case 'dosbing':
-                // Belum ada relasi akun user -> dosen_pembimbing.
+                // Akses data turunan magang untuk dosbing tidak dibuka di
+                // trait ini. Controller penjadwalan presentasi memakai aturan
+                // dosbing sendiri (hanya mahasiswa bimbingannya).
                 return false;
         }
 
@@ -175,7 +212,7 @@ trait AuthorizesMagangAccess
                 $q->where('mitra_id', $mitraId);
             };
         } else {
-            // Role dosbing dan role lain tidak memiliki data turunan yang boleh diakses.
+            // Dosbing dan role lain tidak memiliki akses data turunan umum.
             return $query->whereRaw('1 = 0');
         }
 

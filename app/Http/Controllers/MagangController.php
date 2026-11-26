@@ -13,6 +13,7 @@ use App\Models\JadwalPresentasi;
 use App\Models\NilaiMitra;
 use App\Models\PeriodeMagang;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -307,6 +308,17 @@ class MagangController extends Controller
             }
         }
 
+        if (!$isAdmin && $request->exists('status_magang')) {
+            return response()->json([
+                'message' => 'Hanya admin yang berwenang mengubah status magang.',
+                'errors' => [
+                    'status_magang' => [
+                        'Mahasiswa tidak dapat menetapkan status magang.',
+                    ],
+                ],
+            ], 403);
+        }
+
         $rules = [
             'mahasiswa_id' => $isAdmin ? ['required', 'exists:mahasiswa,mahasiswa_id'] : ['sometimes'],
             'mitra_id' => ['nullable', 'exists:mitra,mitra_id'],
@@ -321,7 +333,7 @@ class MagangController extends Controller
             'role_magang' => ['nullable', 'string', 'max:100'],
             'jobdesk' => ['nullable', 'string'],
             'periode_bulan' => ['nullable', 'integer', 'min:1'],
-            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai', 'ditolak'])],
+            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai'])],
             // Dokumen wajib untuk pendaftaran mahasiswa, opsional saat admin
             // membuat penempatan langsung dari Master Data.
             'dokumenPenerimaan' => $isAdmin
@@ -476,7 +488,23 @@ class MagangController extends Controller
         $user = $request->user();
         $this->authorizeMagangAccess($user, $magang);
 
-        if ($user->role === 'admin') {
+        $isAdmin = $this->isAdminRole($user);
+
+        // Status magang hanya boleh dikelola admin yang berwenang. Pemeriksaan
+        // ini dilakukan di backend agar tidak bergantung pada penyembunyian
+        // tombol di frontend.
+        if (!$isAdmin && $request->exists('status_magang')) {
+            return response()->json([
+                'message' => 'Hanya admin yang berwenang mengubah status magang.',
+                'errors' => [
+                    'status_magang' => [
+                        'Mahasiswa tidak dapat mengubah status magangnya sendiri.',
+                    ],
+                ],
+            ], 403);
+        }
+
+        if ($isAdmin && $user->role === 'admin') {
             // Jika admin mencoba memindahkan magang ke mahasiswa lain,
             // mahasiswa tujuan juga harus berada di prodi admin.
             if ($request->filled('mahasiswa_id')
@@ -496,7 +524,7 @@ class MagangController extends Controller
             'role_magang' => ['nullable', 'string', 'max:100'],
             'jobdesk' => ['nullable', 'string'],
             'periode_bulan' => ['nullable', 'integer', 'min:1'],
-            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai', 'ditolak'])],
+            'status_magang' => ['sometimes', Rule::in(['draft', 'berlangsung', 'selesai'])],
             'dokumenPenerimaan' => 'sometimes|file|mimes:pdf|max:5120',
             'dokumenPraKRS' => 'sometimes|file|mimes:pdf|max:5120',
         ];
@@ -516,7 +544,11 @@ class MagangController extends Controller
         $targetMahasiswa = Mahasiswa::findOrFail($targetMahasiswaId);
         $periodeChanged = $request->filled('periode_id')
             || $request->hasAny(['semester_magang', 'tahun_ajaran']);
-        $periode = $this->resolveRequestedPeriode($request, $magang);
+        // Update status atau field lain tanpa perubahan periode tidak boleh
+        // menulis ulang relasi periode secara tidak sengaja.
+        $periode = $periodeChanged
+            ? $this->resolveRequestedPeriode($request, $magang)
+            : null;
 
         if ($periode) {
             $isSamePeriode = (int) $magang->periode_id === (int) $periode->periode_id;
@@ -624,31 +656,164 @@ class MagangController extends Controller
 
     /**
      * Hapus data magang.
+     *
+     * Aturan Prioritas 5:
+     * - Hanya status `draft` (Belum Mulai) yang boleh dihapus.
+     * - Admin Prodi terbatas pada prodi sendiri, Super Admin lintas prodi.
+     * - Mahasiswa hanya boleh membatalkan draft miliknya sendiri.
+     * - Mitra dan Dosen Pembimbing tidak berwenang menghapus.
+     * - Penghapusan ditolak (422) bila masih ada data turunan yang harus
+     *   dipertahankan (dokumen, logbook/foto, laporan, penilaian, peserta
+     *   jadwal presentasi).
      */
-
-
-    // Controller - bersih
     public function destroy(Request $request, $id)
     {
         $user = $request->user();
-        $magang = Magang::findOrFail($id);
 
+        // Mitra dan dosbing tidak memiliki kewenangan menghapus magang,
+        // walaupun mereka dapat mengakses data magangnya untuk membaca.
+        if (!$user || !in_array($user->role, ['admin', 'super_admin', 'mahasiswa'], true)) {
+            return response()->json([
+                'message' => 'Role ini tidak berwenang menghapus data magang.',
+            ], 403);
+        }
+
+        $magang = Magang::with(['mahasiswa.prodi', 'periode.tahunAjaran'])->find($id);
+
+        if (!$magang) {
+            return response()->json([
+                'message' => 'Data magang tidak ditemukan.',
+            ], 404);
+        }
+
+        // Admin Prodi hanya prodi sendiri, mahasiswa hanya miliknya sendiri,
+        // Super Admin lintas prodi. Pelanggaran -> 403.
         $this->authorizeMagangAccess($user, $magang);
+
+        if ($magang->status_magang !== 'draft') {
+            return response()->json([
+                'message' => 'Data magang tidak dapat dihapus karena statusnya bukan draft (Belum Mulai).',
+                'errors' => [
+                    'status_magang' => [
+                        'Status saat ini: ' . $this->magangStatusLabel($magang->status_magang)
+                        . '. Hanya data magang berstatus draft yang dapat dihapus.',
+                    ],
+                ],
+            ], 422);
+        }
+
+        $blockers = $this->magangDeletionBlockers($magang);
+
+        if (!empty($blockers)) {
+            return response()->json([
+                'message' => 'Data magang tidak dapat dihapus karena masih memiliki data turunan: '
+                    . implode(', ', $blockers) . '.',
+                'errors' => [
+                    'relations' => $blockers,
+                ],
+            ], 422);
+        }
 
         try {
             DB::transaction(function () use ($magang) {
-                $magang->delete();
+                // Kunci baris lalu validasi ulang di dalam transaksi agar tidak
+                // ada data turunan yang lolos di antara pemeriksaan dan
+                // penghapusan.
+                $locked = Magang::whereKey($magang->getKey())
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$locked) {
+                    throw (new ModelNotFoundException())->setModel(
+                        Magang::class,
+                        [$magang->getKey()]
+                    );
+                }
+
+                if ($locked->status_magang !== 'draft') {
+                    throw new \DomainException(
+                        'Status magang berubah menjadi '
+                        . $this->magangStatusLabel($locked->status_magang)
+                        . ' sebelum penghapusan.'
+                    );
+                }
+
+                $lateBlockers = $this->magangDeletionBlockers($locked);
+
+                if (!empty($lateBlockers)) {
+                    throw new \DomainException(
+                        'Data turunan baru ditemukan sebelum penghapusan: '
+                        . implode(', ', $lateBlockers) . '.'
+                    );
+                }
+
+                // Sengaja memakai query builder agar hook Magang::deleting
+                // (yang menghapus file) tidak berjalan sebelum transaksi
+                // commit. Semua relasi turunan sudah dipastikan kosong, jadi
+                // tidak ada file/data turunan yang perlu atau boleh dihapus.
+                Magang::whereKey($locked->getKey())->delete();
             });
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Data magang tidak ditemukan.',
+            ], 404);
+        } catch (\DomainException $e) {
+            return response()->json([
+                'message' => 'Data magang tidak dapat dihapus: ' . $e->getMessage(),
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
 
             return response()->json([
-                'message' => 'Data magang berhasil dihapus'
-            ], 200);
-
-        } catch (\Throwable $th) {
-            return response()->json([
-                'message' => $th->getMessage(),
+                'message' => 'Terjadi kesalahan saat menghapus data magang.',
             ], 500);
         }
+
+        return response()->json([
+            'message' => 'Data magang berhasil dihapus'
+        ], 200);
+    }
+
+    /**
+     * Daftar data turunan yang membuat magang tidak boleh dihapus.
+     *
+     * @return array<int, string>
+     */
+    private function magangDeletionBlockers(Magang $magang): array
+    {
+        $blockers = [];
+
+        if ($magang->dokumenMagang()->exists()) {
+            $blockers[] = 'dokumen magang';
+        }
+
+        if ($magang->logbook()->exists()) {
+            $blockers[] = 'logbook/foto kegiatan';
+        }
+
+        if ($magang->laporan()->exists()) {
+            $blockers[] = 'laporan magang';
+        }
+
+        if ($magang->penilaianMitra()->exists()) {
+            $blockers[] = 'penilaian mitra';
+        }
+
+        if ($magang->pesertaJadwal()->exists()) {
+            $blockers[] = 'peserta jadwal presentasi';
+        }
+
+        return $blockers;
+    }
+
+    private function magangStatusLabel(?string $status): string
+    {
+        return [
+            'draft' => 'Belum Mulai',
+            'berlangsung' => 'Sedang Magang',
+            'selesai' => 'Selesai',
+            'ditolak' => 'Ditolak (historis)',
+        ][$status] ?? (string) $status;
     }
 
     public function showDetail(Request $request, $id)

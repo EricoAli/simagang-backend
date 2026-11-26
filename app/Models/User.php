@@ -78,4 +78,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(Mitra::class, 'user_id', 'user_id');
     }
+
+    public function dosbing()
+    {
+        return $this->hasOne(Dosbing::class, 'user_id', 'user_id');
+    }
 }

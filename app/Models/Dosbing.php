@@ -13,6 +13,7 @@ class Dosbing extends Model
     protected $primaryKey = 'dosbing_id';
 
     protected $fillable = [
+        'user_id',
         'nip',
         'nama',
         'prodi_id',
@@ -31,5 +32,10 @@ class Dosbing extends Model
     public function prodi()
     {
         return $this->belongsTo(Prodi::class, 'prodi_id', 'prodi_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id', 'user_id');
     }
 }
