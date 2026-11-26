@@ -250,6 +250,8 @@ Dokumen ini adalah referensi Postman-ready untuk seluruh endpoint operasional Su
 | Parameter | Type | Required | Keterangan |
 |---|---|---|---|
 | `prodi_id` | integer \| string | Optional | Kosongkan untuk mode agregat seluruh prodi, atau isi `1`..`4` untuk memfilter prodi spesifik |
+| `periode_id` | integer | Optional | Filter statistik berdasarkan master `periode_id` |
+| `tahun_ajaran_id` | integer | Optional | Filter statistik berdasarkan master `tahun_ajaran_id` |
 
 ### Contoh 1: Mode Agregat Seluruh Prodi (`GET /api/super-admin/dashboard`)
 ```json
@@ -320,6 +322,29 @@ Dokumen ini adalah referensi Postman-ready untuk seluruh endpoint operasional Su
 }
 ```
 
-> [!IMPORTANT]
-> **Keterbatasan Relasi Mitra & Dosen pada Filter Dashboard:**
-> Pada response mode filter (`?prodi_id=...`), nilai `jumlah_mitra` dan `jumlah_dosbing` **tetap mencerminkan jumlah global institusional tingkat DTEDI**, bukan statistik khusus prodi tersebut. Hal ini disebabkan karena pada skema basis data saat ini, tabel `mitra` dan `dosen_pembimbing` belum memiliki relasi langsung `prodi_id`. Pengembang frontend dan PM tidak boleh mengasumsikan angka tersebut sebagai metrik spesifik per program studi.
+> [!NOTE]
+> **Relasi Dosen Pembimbing & Filter Periode Dashboard:**
+> - Statistik aktif magang pada `/api/super-admin/dashboard` kini dihitung dari mahasiswa berstatus `'berlangsung'` (ter-scope periode aktif bila tidak difilter, atau mengikuti `?periode_id=` / `?tahun_ajaran_id=`), dan tidak lagi memakai `latest('semester_magang')`.
+> - Tabel `dosen_pembimbing` kini mendukung `prodi_id` opsional; nilai `jumlah_dosbing` di dashboard tetap mencerminkan total dosen pembimbing institusional DTEDI bila belum ada pemetaan penuh per prodi.
+
+---
+
+## 7. Master Tahun Ajaran (Super Admin CRUD)
+
+- **Read (`GET /api/tahun-ajaran`, `GET /api/tahun-ajaran/{id}`):** Dapat diakses oleh seluruh role terautentikasi (`?is_active=`, `?q=`, `?all=1`, default `per_page=100`).
+- **Write (`role:super_admin`):**
+  - `POST /api/tahun-ajaran`: Body `{ "tahun_ajaran": "2026/2027", "is_active": true }` (wajib format `YYYY/YYYY` dua tahun berurutan, unik).
+  - `PUT /api/tahun-ajaran/{id}`: Mendukung partial update `{ "is_active": false }` untuk toggle dari FE `masterPeriode` maupun pembaruan nama tahun ajaran (otomatis mensinkronkan `magang.tahun_ajaran`).
+  - `PATCH /api/tahun-ajaran/{id}/status`: Body `{ "is_active": boolean }`.
+  - `DELETE /api/tahun-ajaran/{id}`: Ditolak `409` jika masih direferensikan oleh `periode_magang`, `magang`, atau `mahasiswa`.
+
+---
+
+## 8. Master Periode Magang (Super Admin CRUD)
+
+- **Read (`GET /api/periode-magang`, `GET /api/periode-magang/{id}`):** Dapat diakses oleh seluruh role terautentikasi (`?tahun_ajaran_id=`, `?semester_magang=`, `?jenis_semester=`, `?is_active=`, `?all=1`, default `per_page=100`). Setiap item menyertakan relasi `tahun_ajaran: { tahun_ajaran_id, tahun_ajaran, is_active }` serta atribut `label`.
+- **Write (`role:super_admin`):**
+  - `POST /api/periode-magang`: Body `{ "tahun_ajaran_id": 1, "semester_magang": 8, "jenis_semester": "Genap", "is_active": true }` (memvalidasi paritas `Gasal`=ganjil, `Genap`=genap, serta keunikan kombinasi).
+  - `PUT /api/periode-magang/{id}`: Mendukung partial update `{ "is_active": false }` untuk toggle status maupun edit periode (mensinkronkan field periode pada `magang` terkait).
+  - `PATCH /api/periode-magang/{id}/status`: Body `{ "is_active": boolean }`.
+  - `DELETE /api/periode-magang/{id}`: Ditolak `409` jika masih direferensikan oleh `magang`.

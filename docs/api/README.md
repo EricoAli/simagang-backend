@@ -1,75 +1,64 @@
 # SIMAGANG API Reference (2026 Target)
 
-Dokumen ini adalah referensi API utama untuk SIMAGANG DTEDI, hasil verifikasi terhadap source code baseline saat ini (Laravel 13, Oktober 2026).
+Dokumen ini adalah referensi API utama untuk SIMAGANG DTEDI (Laravel 13, revisi November 2026), selaras dengan repository FE (`dev`).
 
 ## Tujuan Dokumentasi
-Memberikan panduan teknis berstandar Postman untuk Project Manager dan Frontend Developer. Dokumentasi ini hanya memuat behavior API *aktual* yang telah diimplementasikan dan diuji dengan automated testing, bukan sekadar rencana dari dokumen requirements lama.
+Memberikan panduan teknis berstandar Postman untuk Project Manager dan Frontend Developer berdasarkan implementasi controller, model, migrasi, route, dan automated tests yang aktif saat ini.
 
 ## Scope
 Scope dokumentasi saat ini mencakup:
-- Modul Super Admin (Manajemen Admin Prodi & Dashboard Multi-Prodi)
-- Modul Admin (Authentication, Provisioning Prodi, & Dashboard Terisolasi)
-- Modul Mahasiswa (Manajemen Data Mahasiswa dengan Isolasi Multi-Prodi)
-- Penguatan Otorisasi Lintas Prodi (Magang, Logbook, Jadwal Presentasi, Laporan, Dokumen)
+- Master Prodi (`GET /api/prodi`) & Master Tahun Ajaran / Periode Magang Dinamis
+- Modul Super Admin (Manajemen Admin Prodi, Master Tahun Ajaran & Periode, & Dashboard Multi-Prodi)
+- Modul Admin (Authentication, Provisioning Prodi, & Dashboard Terisolasi + `aktivitas_terbaru`)
+- Modul Magang, Presentasi PI Multi-Peserta, Dosen Pembimbing, Mitra, Penilaian Mitra & Export Excel
 
 ## Authentication Overview
 Seluruh endpoint di bawah `/api` diamankan menggunakan **Laravel Sanctum**.
 - Klien harus menyertakan header `Authorization: Bearer <token>`.
-- Token didapat melalui endpoint login (`POST /api/auth/login`).
+- Token didapat melalui endpoint login (`POST /api/auth/login`) yang turut me-load `mitra`, `mahasiswa.prodi`, dan `admin.prodi`.
 - Akun yang dinonaktifkan (`is_active = false`) otomatis ditolak saat login (403) dan token aktifnya dicabut.
 
 ## Role Overview
-- **Super Admin (`super_admin`)**: Bertindak sebagai pengawas tingkat departemen. Memiliki wewenang mengelola akun Admin Prodi dan melihat dashboard agregat 4 prodi.
-- **Admin Prodi (`admin`)**: Bertindak sebagai pengelola program studi (Prodi). Memiliki akses hanya ke data mahasiswa dan magang prodinya sendiri.
-- **Mahasiswa (`mahasiswa`)**: Bertindak sebagai end-user. Hanya memiliki akses ke data miliknya sendiri.
-- **Mitra (`mitra`)** & **Dosen Pembimbing (`dosbing`)**: Peran pendukung operasional magang.
+- **Super Admin (`super_admin`)**: Pengawas tingkat departemen; mengelola akun Admin Prodi, master Tahun Ajaran & Periode Magang, memantau dashboard agregat 4 prodi, serta memiliki hak koreksi penuh lintas prodi (termasuk hapus darurat magang).
+- **Admin Prodi (`admin`)**: Pengelola program studi (`TRPL`, `TRIK`, `TRI`, `TRE`); akses terisolasi pada data mahasiswa, magang, dosen, dokumen, logbook, laporan, penilaian mitra, dan jadwal presentasi prodinya.
+- **Mahasiswa (`mahasiswa`)**: End-user; mendaftar & mengelola magang sendiri sebelum dikonfirmasi (`draft`/`ditolak`), mengisi logbook/laporan, melihat jadwal presentasi.
+- **Mitra (`mitra`)**: Melihat mahasiswa magang yang ditempatkan di mitranya, memberi/memperbarui penilaian, dan mengekspor Excel magang mitranya.
 
 ## Ringkasan Endpoint & Status
 
 | Modul | Endpoint | Method | Fungsi | Status |
 |---|---|---|---|---|
-| **Super Admin** | `/api/super-admin/admin-prodi` | GET | List akun Admin Prodi | IMPLEMENTED — TESTED |
-| **Super Admin** | `/api/super-admin/admin-prodi` | POST | Buat akun Admin Prodi | IMPLEMENTED — TESTED |
-| **Super Admin** | `/api/super-admin/admin-prodi/{id}` | GET | Detail akun Admin Prodi | IMPLEMENTED — TESTED |
-| **Super Admin** | `/api/super-admin/admin-prodi/{id}` | PUT | Update akun Admin Prodi | IMPLEMENTED — TESTED |
-| **Super Admin** | `/api/super-admin/admin-prodi/{id}/status` | PATCH | Aktifkan/nonaktifkan Admin Prodi | IMPLEMENTED — TESTED |
-| **Super Admin** | `/api/super-admin/dashboard` | GET | Dashboard agregat & filter prodi | IMPLEMENTED — TESTED |
-| Admin | Provisioning Seeder / Artisan | N/A | Inisialisasi Admin per Prodi | IMPLEMENTED — TESTED |
-| Admin | `/api/dashboard/admin` | GET | Dashboard Admin (Isolasi Prodi) | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa` | GET | List mahasiswa (Isolasi Prodi) | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa/show` | GET | Detail profil (Self) | IMPLEMENTED — NOT VERIFIED |
-| Mahasiswa | `/api/mahasiswa/{id}` | GET | Detail mahasiswa (Isolasi Prodi) | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa` | POST | Tambah mahasiswa baru | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa/update` | POST | Update mahasiswa | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa/{id}` | DELETE | Hapus mahasiswa | IMPLEMENTED — TESTED |
-| Mahasiswa | `/api/mahasiswa/import` | POST | Import via CSV | IMPLEMENTED — NOT VERIFIED |
-| Magang | `/api/magang/*` | GET/POST/PUT/DELETE | CRUD Magang (Isolasi Prodi & Hak Akses) | IMPLEMENTED — TESTED |
-| Logbook | `/api/logbook/*` | GET/POST/PUT/DELETE | CRUD Logbook (Isolasi Prodi & Hak Akses) | IMPLEMENTED — TESTED |
-| Dokumen Magang | `/api/dokumen-magang/{id}/download` | GET | Download Dokumen Fisik (Private Storage) | IMPLEMENTED — TESTED |
-| Laporan | `/api/laporan/{id}` | GET | Detail Laporan (Mendukung `laporan_id` / `magang_id`) | IMPLEMENTED — TESTED |
-| Laporan | `/api/laporan/{id}/download` | GET | Download Laporan Fisik (Private Storage) | IMPLEMENTED — TESTED |
-| Jadwal Presentasi | `/api/jadwal-presentasi` | GET | List Jadwal (Isolasi Prodi / Mhs Self) | IMPLEMENTED — TESTED |
-| Jadwal Presentasi | `/api/jadwal-presentasi` | POST | Buat Jadwal (Validasi Prodi & magang_id) | IMPLEMENTED — TESTED |
-| Jadwal Presentasi | `/api/jadwal-presentasi/{id}` | GET | Detail Jadwal (Isolasi Prodi / Mhs Self) | IMPLEMENTED — TESTED |
-| Jadwal Presentasi | `/api/jadwal-presentasi/{id}` | PUT | Update Jadwal (Validasi target magang_id) | IMPLEMENTED — TESTED |
-| Jadwal Presentasi | `/api/jadwal-presentasi/{id}` | DELETE | Hapus Jadwal (Isolasi Prodi & Super Admin) | IMPLEMENTED — TESTED |
+| **Prodi** | `/api/prodi` | GET | Daftar 4 program studi DTEDI | IMPLEMENTED — TESTED |
+| **Tahun Ajaran** | `/api/tahun-ajaran`, `/{id}` | GET/POST/PUT/PATCH/DELETE | Master tahun ajaran (`YYYY/YYYY`) & toggle aktif | IMPLEMENTED — TESTED |
+| **Periode Magang** | `/api/periode-magang`, `/{id}` | GET/POST/PUT/PATCH/DELETE | Master semester & `Gasal`/`Genap` per tahun ajaran | IMPLEMENTED — TESTED |
+| **Super Admin** | `/api/super-admin/admin-prodi/*` | GET/POST/PUT/PATCH | Manajemen akun Admin Prodi | IMPLEMENTED — TESTED |
+| **Super Admin** | `/api/super-admin/dashboard` | GET | Dashboard agregat & filter `prodi_id` / `periode_id` / `tahun_ajaran_id` | IMPLEMENTED — TESTED |
+| **Dashboard** | `/api/dashboard/admin` | GET | Statistik Admin/SuperAdmin + `aktivitas_terbaru` | IMPLEMENTED — TESTED |
+| **Dashboard** | `/api/dashboard/mitra` | GET | Statistik Mitra (mendukung filter periode) | IMPLEMENTED — TESTED |
+| **Dosbing** | `/api/dosbing/*` | GET/POST/PUT/DELETE | Master dosen (`prodi_id` opsional; write `admin,super_admin`) | IMPLEMENTED — TESTED |
+| **Mitra** | `/api/mitra/*` | GET/POST/PUT/DELETE | Master mitra + filter `periode_id` & search nama/NIM intern | IMPLEMENTED — TESTED |
+| **Magang** | `/api/magang/*` | GET/POST/PUT/DELETE | Manajemen magang (periode dinamis, proteksi status & hapus) | IMPLEMENTED — TESTED |
+| **Magang Export** | `/api/magang/export/excel` | GET | Export Excel 1 sheet terurut tahun ajaran (nama file tersanitasi) | IMPLEMENTED — TESTED |
+| **Jadwal Presentasi** | `/api/jadwal-presentasi/*` | GET/POST/PUT/DELETE | Sesi presentasi + `dosen_penguji_id` & filter `dosbing_id` | IMPLEMENTED — TESTED |
+| **Presentasi Peserta** | `/api/jadwal-presentasi/{id}/peserta` | GET/POST/DELETE | Kelola multi-peserta sesi & kandidat eligible | IMPLEMENTED — TESTED |
+| **Presentasi Advisees** | `/api/jadwal-presentasi/advisees` | GET | Daftar status penjadwalan mahasiswa bimbingan | IMPLEMENTED — TESTED |
 
 ## API Reference Detail
-- [**Super Admin API & Dashboard**](./super-admin.md)
+- [**Super Admin, Tahun Ajaran & Periode API**](./super-admin.md)
 - [**Admin API & Provisioning**](./admin.md)
+- [**ADM Magang API**](./adm-magang.md)
+- [**ADM Presentasi PI API**](./adm-presentasi-pi.md)
+- [**Dashboard API**](./dashboard.md)
 - [**Mahasiswa API**](./mahasiswa.md)
-- [**Jadwal Presentasi & Otorisasi**](./README.md#jadwal-presentasi-rules)
 
 ### Jadwal Presentasi Rules
-1. **Relasi Data:** Setiap jadwal baru wajib berelasi dengan `magang_id`. Foreign key dikonfigurasi dengan `ON DELETE SET NULL` agar jadwal historis tetap tersimpan jika data magang dihapus.
-2. **Admin Prodi:** Hanya dapat melihat, membuat, mengubah, dan menghapus jadwal mahasiswa prodinya. Ditolak jika mengubah `magang_id` ke mahasiswa prodi lain.
-3. **Mahasiswa:** Hanya dapat melihat jadwal untuk magang miliknya sendiri (read-only).
-4. **Super Admin:** Memiliki hak penuh melihat, membuat, mengubah, dan menghapus seluruh jadwal di seluruh prodi, termasuk mengelola jadwal historis tanpa relasi (`magang_id = NULL`).
-5. **Mitra & Dosen Pembimbing:** Ditolak dengan HTTP 403 Forbidden.
+1. **Sesi & Peserta:** Sesi presentasi mendukung `dosen_penguji_id` serta relasi multi-peserta pada tabel `jadwal_presentasi_peserta` (dengan kompatibilitas kolom `magang_id` `ON DELETE SET NULL`).
+2. **Aturan Penguji vs Pembimbing:** Dosen penguji pada sesi tidak boleh sama dengan dosen pembimbing (`dosbing_id`) peserta mana pun di sesi tersebut (`422`).
+3. **Admin Prodi:** Hanya mengelola jadwal & peserta mahasiswa prodinya. Jadwal historis (`magang_id = NULL` & `prodi_id = NULL` tanpa peserta) tetap dibatasi hanya untuk Super Admin (`403` bagi Admin Prodi).
+4. **Mahasiswa:** Hanya dapat melihat jadwal untuk magang miliknya sendiri baik lewat `magang_id` maupun tabel peserta (read-only).
+5. **Mitra & Dosen Pembimbing:** Endpoint jadwal utama (`/api/jadwal-presentasi`, `/{id}`) tetap menolak peran historis `mitra` & `dosbing` (`403`).
 
 ---
 
-## Known Limitations & Catatan Keputusan
-
-1. **Nama Resmi Prodi (NEED REVIEW)**: Nama panjang untuk prodi TRIK, TRI, dan TRE belum dikonfirmasi dari spesifikasi 2026, sehingga data master saat ini masih menggunakan singkatan.
-2. **Sinkronisasi Postman Collection**: Repository saat ini hanya memuat rencana Postman (`docs/08-postman-plan.md`). File collection JSON Postman belum tersedia secara lokal di repo, sehingga pembaruan workspace Postman memerlukan import/sinkronisasi manual berdasarkan dokumen referensi di folder `docs/api/`.
+## Catatan Koleksi Postman
+Koleksi Postman terbaru disimpan di folder `postman/`, mencakup [SIMAGANG_Admin_SuperAdmin.postman_collection.json](../../postman/SIMAGANG_Admin_SuperAdmin.postman_collection.json) dan koleksi tambahan modul revisi 2026 [SIMAGANG_Revisi_2026_BE1.postman_collection.json](../../postman/SIMAGANG_Revisi_2026_BE1.postman_collection.json).

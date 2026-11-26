@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Magang;
 use App\Models\Mitra;
+use App\Models\PeriodeMagang;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
-use App\Models\Magang;
-use App\Models\User;
 use Illuminate\Support\Str;
 
 use Illuminate\Http\Request;
@@ -22,8 +23,7 @@ class MitraController extends Controller
     {
         $user = $request->user();
 
-        // Mitra bersifat global, tetapi data magang yang ikut dimuat dibatasi sesuai role.
-        $query = Mitra::with(['magang' => function ($q) use ($user) {
+        $scopeRoleMagang = function ($q) use ($user) {
             if ($user->role === 'super_admin') {
                 return;
             }
@@ -40,18 +40,73 @@ class MitraController extends Controller
             } else {
                 $q->whereRaw('1 = 0');
             }
+        };
+
+        $periodeId = $request->query('periode_id');
+        $tahunAjaranId = $request->query('tahun_ajaran_id');
+        $tahunAjaran = trim((string) $request->query('tahun_ajaran', ''));
+        $jenisSemester = $request->query('jenis_semester')
+            ? PeriodeMagang::normalizeJenisSemester((string) $request->query('jenis_semester'))
+            : null;
+        $semesterMagang = $request->query('semester_magang');
+        $statusMagang = $request->query('status_magang')
+            ? Magang::normalizeStatus((string) $request->query('status_magang'))
+            : null;
+
+        $hasPeriodFilter = (bool) ($periodeId || $tahunAjaranId || $tahunAjaran !== '' || $jenisSemester || $semesterMagang || $statusMagang);
+
+        $applyPeriodFilter = function ($q) use ($periodeId, $tahunAjaranId, $tahunAjaran, $jenisSemester, $semesterMagang, $statusMagang) {
+            if ($periodeId) {
+                $q->where('periode_id', $periodeId);
+            }
+            if ($tahunAjaranId) {
+                $q->where('tahun_ajaran_id', $tahunAjaranId);
+            }
+            if ($tahunAjaran !== '') {
+                $q->where('tahun_ajaran', 'like', "{$tahunAjaran}%");
+            }
+            if ($jenisSemester) {
+                $q->where('jenis_semester', $jenisSemester);
+            }
+            if ($semesterMagang) {
+                $q->where('semester_magang', (int) $semesterMagang);
+            }
+            if ($statusMagang) {
+                $q->where('status_magang', $statusMagang);
+            }
+        };
+
+        $query = Mitra::with(['magang' => function ($q) use ($scopeRoleMagang, $applyPeriodFilter) {
+            $scopeRoleMagang($q);
+            $applyPeriodFilter($q);
+            $q->with(['mahasiswa.prodi', 'periode.tahunAjaran']);
         }]);
 
-
-        // Pencarian: nama_mitra
-        if ($search = $request->query('q')) {
-            $query->where(function ($q) use ($search) {
-                // $q->where('nama_mitra', 'ilike', "%{$search}%");
-                $q->whereRaw('LOWER(nama_mitra) LIKE LOWER(?)', ["%{$search}%"]);
+        if ($hasPeriodFilter || $request->boolean('has_magang')) {
+            $query->whereHas('magang', function ($q) use ($scopeRoleMagang, $applyPeriodFilter) {
+                $scopeRoleMagang($q);
+                $applyPeriodFilter($q);
             });
         }
 
-        $perPage = (int) $request->query('per_page', 10);
+        // Pencarian: nama_mitra, narahubung, email, atau nama/NIM mahasiswa magang sesuai scope role
+        if ($search = trim((string) $request->query('q', ''))) {
+            $query->where(function ($q) use ($search, $scopeRoleMagang, $applyPeriodFilter) {
+                $q->whereRaw('LOWER(nama_mitra) LIKE LOWER(?)', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(narahubung) LIKE LOWER(?)', ["%{$search}%"])
+                    ->orWhereRaw('LOWER(email) LIKE LOWER(?)', ["%{$search}%"])
+                    ->orWhereHas('magang', function ($mq) use ($search, $scopeRoleMagang, $applyPeriodFilter) {
+                        $scopeRoleMagang($mq);
+                        $applyPeriodFilter($mq);
+                        $mq->whereHas('mahasiswa', function ($sq) use ($search) {
+                            $sq->where('nama', 'like', "%{$search}%")
+                                ->orWhere('nim', 'like', "%{$search}%");
+                        });
+                    });
+            });
+        }
+
+        $perPage = min(max((int) $request->query('per_page', 10), 1), 500);
         $mitra = $query->orderBy('mitra_id')->paginate($perPage);
 
         return response()->json($mitra, 200);

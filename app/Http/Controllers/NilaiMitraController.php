@@ -26,9 +26,9 @@ class NilaiMitraController extends Controller
     public function index(Request $request)
     {
         $query = NilaiMitra::with([
-            'magang:mitra_id,magang_id,mahasiswa_id',
-            'magang.mahasiswa:mahasiswa_id,nama',
-            // 'magang.mitra'
+            'magang:mitra_id,magang_id,mahasiswa_id,periode_id,tahun_ajaran_id,tahun_ajaran,semester_magang,jenis_semester,status_magang',
+            'magang.mahasiswa:mahasiswa_id,nama,nim,prodi_id',
+            'magang.periode.tahunAjaran',
         ]);
 
         // Batasi data sesuai role sebelum filter query dari klien diterapkan.
@@ -53,53 +53,86 @@ class NilaiMitraController extends Controller
             $query->whereHas('magang', function ($q) use ($mahasiswaId) {
                 $q->where('mahasiswa_id', $mahasiswaId);
             });
-        } else {
+        } elseif ($user->role !== 'super_admin') {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        //  Filter by magang_id
+        // Filter by magang_id
         if ($request->query('magang_id')) {
             $query->where('magang_id', $request->query('magang_id'));
         }
 
+        // Filter periode / tahun ajaran / semester
+        if ($periodeId = $request->query('periode_id')) {
+            $query->whereHas('magang', fn ($q) => $q->where('periode_id', $periodeId));
+        }
 
-        //  Filter by minimum nilai_teknis
+        if ($tahunAjaranId = $request->query('tahun_ajaran_id')) {
+            $query->whereHas('magang', fn ($q) => $q->where('tahun_ajaran_id', $tahunAjaranId));
+        }
+
+        if ($tahunAjaran = trim((string) $request->query('tahun_ajaran', ''))) {
+            $query->whereHas('magang', fn ($q) => $q->where('tahun_ajaran', 'like', "{$tahunAjaran}%"));
+        }
+
+        if ($semesterMagang = $request->query('semester_magang')) {
+            $query->whereHas('magang', fn ($q) => $q->where('semester_magang', (int) $semesterMagang));
+        }
+
+        // Filter by minimum nilai_teknis
         if ($request->query('min_teknis')) {
             $query->where('nilai_teknis', '>=', $request->query('min_teknis'));
         }
 
-        //  Filter by maximum nilai_teknis
+        // Filter by maximum nilai_teknis
         if ($request->query('max_teknis')) {
             $query->where('nilai_teknis', '<=', $request->query('max_teknis'));
         }
 
-        //  Filter by Mitra
+        // Filter by Mitra
         if ($request->query('mitra_id')) {
             $query->whereHas('magang', function ($q) use ($request) {
                 $q->where('mitra_id', $request->query('mitra_id'));
             });
         }
 
-
-        //  Filter by range profesionalisme
+        // Filter by range profesionalisme
         if ($request->query('range_profesional')) {
-            [$min, $max] = explode('-', $request->query('range_profesional'));
-            $query->whereBetween('nilai_profesionalisme_etika', [(int) $min, (int) $max]);
+            $parts = explode('-', (string) $request->query('range_profesional'));
+            if (count($parts) === 2) {
+                $query->whereBetween('nilai_profesionalisme_etika', [(int) $parts[0], (int) $parts[1]]);
+            }
         }
 
-        //  Filter by keyword (cari di keterangan)
-        if ($request->query('q')) {
-            $search = $request->query('q');
-            $query->where('keterangan', 'like', "%{$search}%");
+        // Filter by keyword (cari di keterangan, nama/NIM mahasiswa)
+        if ($search = trim((string) $request->query('q', ''))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('keterangan', 'like', "%{$search}%")
+                    ->orWhereHas('magang.mahasiswa', function ($mq) use ($search) {
+                        $mq->where('nama', 'like', "%{$search}%")
+                            ->orWhere('nim', 'like', "%{$search}%");
+                    });
+            });
         }
 
-        //  Sorting dinamis
-        $sortBy = $request->query('sort_by', 'penilaian_id');
-        $sortOrder = $request->query('sort_order', 'desc');
+        // Sorting aman (whitelist)
+        $allowedSort = [
+            'penilaian_id',
+            'magang_id',
+            'nilai_teknis',
+            'nilai_profesionalisme_etika',
+            'nilai_komunikasi_presentasi',
+            'nilai_proyek_pengalaman_industri',
+            'created_at',
+        ];
+        $sortBy = in_array($request->query('sort_by'), $allowedSort, true)
+            ? $request->query('sort_by')
+            : 'penilaian_id';
+        $sortOrder = strtolower((string) $request->query('sort_order', 'desc')) === 'asc' ? 'asc' : 'desc';
         $query->orderBy($sortBy, $sortOrder);
 
-        //  Pagination
-        $perPage = (int) $request->query('per_page', 15);
+        // Pagination
+        $perPage = min(max((int) $request->query('per_page', 15), 1), 500);
         $data = $query->paginate($perPage);
 
         return response()->json($data, 200);
