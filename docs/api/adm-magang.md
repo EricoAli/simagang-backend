@@ -1,7 +1,7 @@
 # ADM Magang API Reference
 
-**Status:** IMPLEMENTED — BROKEN/RISKY
-**Note:** All endpoints currently use `role:admin,mahasiswa,mitra,dosbing`, meaning Mahasiswa can access Admin endpoints (authorization gap).
+**Status:** IMPLEMENTED — TESTED
+**Authentication:** Bearer Token (Sanctum)
 
 ---
 
@@ -9,162 +9,86 @@
 
 - **HTTP Method:** `GET`
 - **Endpoint:** `/api/magang`
-- **Purpose:** Retrieve a paginated list of all magang entries. Used by Admin for monitoring, and filtered automatically for Mahasiswa.
-- **Authentication:** Bearer Token (Sanctum)
-- **Role:** Admin, Mahasiswa, Mitra, Dosbing
+- **Purpose:** Mengambil daftar magang dengan isolasi role (`admin` per prodi, `mahasiswa` milik sendiri, `mitra` milik mitranya, `super_admin` seluruh prodi).
 
 ### Query Parameters
 | Parameter | Type | Description |
-|-----------|------|-------------|
-| `mahasiswa_id` | integer | (Optional) Filter by specific mahasiswa. |
-| `mitra_id` | integer | (Optional) Filter by specific mitra. |
-| `angkatan` | string | (Optional) Filter by angkatan. |
-| `semester_magang` | integer | (Optional) Filter by semester. |
-| `q` | string | (Optional) Search query on `jobdesk` or `role_magang`. |
-| `penilaian` | string | (Optional) Filter by `none` (no mitra assessment) or `exist`. |
-| `per_page` | integer | (Optional) Number of items per page. Default: 10. |
+|---|---|---|
+| `mahasiswa_id` | integer | Filter berdasarkan ID mahasiswa. |
+| `mitra_id` | integer | Filter berdasarkan ID mitra. |
+| `dosbing_id` | integer | Filter berdasarkan ID dosen pembimbing. |
+| `periode_id` | integer | Filter berdasarkan master `periode_id`. |
+| `tahun_ajaran_id` | integer | Filter berdasarkan master `tahun_ajaran_id`. |
+| `tahun_ajaran` | string | Prefix/tahun ajaran (mis. `2026/2027` atau `2026`). |
+| `jenis_semester` | string | `Gasal` atau `Genap`. |
+| `angkatan` | string | Filter angkatan mahasiswa. |
+| `semester_magang` | integer | Filter nomor semester (dinamis >= 1). |
+| `status_magang` | string | Filter status (`draft`/`belum_mulai`, `berlangsung`/`sedang_magang`, `selesai`, `ditolak`). |
+| `penilaian` | string | `none` atau `exist`. |
+| `q` | string | Pencarian pada `jobdesk`, `role_magang`, `mahasiswa.nama`, `mahasiswa.nim`, dan `mitra.nama_mitra`. |
+| `per_page` | integer | Default: `10` (maks `500`). |
 
-### Response (Success)
-- **Status Code:** `200 OK`
-- **Body Example:**
-```json
-{
-  "current_page": 1,
-  "data": [
-    {
-      "magang_id": 1,
-      "mahasiswa_id": 1,
-      "mitra_id": 2,
-      "dosbing_id": null,
-      "tahun_ajaran": "2026",
-      "semester_magang": 6,
-      "role_magang": "Backend Developer",
-      "jobdesk": "API Development",
-      "status_magang": "berlangsung",
-      "mahasiswa": { ... },
-      "mitra": { ... },
-      "dosenPembimbing": null
-    }
-  ],
-  "per_page": 10
-}
-```
-**Implementation Note:** If called by an Admin, the code crashes if the controller tries to implicitly access `$user->mahasiswa` in older controller logic (though `index` checks `$user->role === 'mahasiswa'`). 
+### Field Baru pada Item Magang
+- `status_magang`: `'draft' | 'berlangsung' | 'selesai' | 'ditolak'`
+- `status_label`: `'Belum Mulai' | 'Sedang Magang' | 'Selesai' | 'Ditolak'`
+- `tahun_ajaran`: string (mis. `"2026/2027"`, tetap aman dari collision relasi via relasi `masterTahunAjaran`)
+- `periode_id`, `tahun_ajaran_id`, `jenis_semester`, `periode_label`
+- `periode`: objek `PeriodeMagang` + `tahun_ajaran`
+- `can_delete`: boolean sesuai hak role dan status magang saat ini.
 
 ---
 
-## 2. Get Magang Detail (Basic)
+## 2. Get Magang Detail & Full Monitoring
 
-- **HTTP Method:** `GET`
-- **Endpoint:** `/api/magang/{id}`
-- **Purpose:** Retrieve basic magang details by ID along with its relations (mahasiswa, mitra, dosbing).
-- **Authentication:** Bearer Token (Sanctum)
-- **Path Parameters:**
-  - `id` (integer) - Magang ID
-
-### Response (Success)
-- **Status Code:** `200 OK`
+- `GET /api/magang/{id}` — Detail record magang + relasi (`mahasiswa.prodi`, `mitra`, `dosenPembimbing`, `periode.tahunAjaran`, `masterTahunAjaran`) + `can_delete`.
+- `GET /api/magang/{id}/detail` — Mengembalikan `{ detail, logbook, penilaian, dokumen, laporan, jadwal_presentasi, jadwal_presentasi_list }`.
+  - `dokumen` mengembalikan **seluruh tipe dokumen** milik `magang_id` tersebut.
+  - `jadwal_presentasi` mengambil jadwal terbaru baik dari kolom `jadwal_presentasi.magang_id` maupun pivot multi-peserta `jadwal_presentasi_peserta`, lengkap dengan `dosen_penguji`.
 
 ---
 
-## 3. Get Magang Detail (Full/Monitoring)
-
-- **HTTP Method:** `GET`
-- **Endpoint:** `/api/magang/{id}/detail`
-- **Purpose:** Retrieve full magang details including logbook entries, mitra assessment, and uploaded documents.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Response (Success)
-- **Status Code:** `200 OK`
-- **Body Example:**
-```json
-{
-  "status": "success",
-  "data": {
-    "magang": { ... },
-    "logbook": [ ... ],
-    "penilaian": { ... },
-    "dokumen": [ ... ],
-    "laporan": { ... }
-  }
-}
-```
-
----
-
-## 4. Create Magang (Pendaftaran)
-
-**Status:** CONFLICTING (Forces `doc_pra_krs` which PM docs say is out of scope. Hardcodes semester 6 and 7).
+## 3. Create Magang
 
 - **HTTP Method:** `POST`
 - **Endpoint:** `/api/magang`
-- **Purpose:** Register a new magang. Typically done by Mahasiswa.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Request Body (Multipart/form-data)
-| Field | Type | Description |
-|-------|------|-------------|
-| `mitra_id` | integer | (Optional) ID of Mitra. |
-| `semester_magang` | integer | **Must be 6 or 7.** |
-| `role_magang` | string | (Optional) |
-| `jobdesk` | string | (Optional) |
-| `dokumenPenerimaan` | file (pdf) | **Required.** Max 5MB. |
-| `dokumenPraKRS` | file (pdf) | **Required.** Max 5MB. (CONFLICT: Requirement says out of scope). |
-
-### Response (Success)
-- **Status Code:** `201 Created`
-
-### Response (Error)
-- **Status Code:** `422 Unprocessable Entity` (Validation failure)
-
-**Implementation Note:** Crashes if called by Admin because it explicitly assigns `mahasiswa_id` via `$request->user()->mahasiswa->mahasiswa_id`.
+- **Role:**
+  - **Mahasiswa:** membuat pendaftaran untuk dirinya sendiri (`status_magang` dipaksa `'draft'`; `dokumenPenerimaan` wajib PDF maks 5MB; `dokumenPraKRS` **opsional/nullable** PDF maks 5MB).
+  - **Admin Prodi / Super Admin:** dapat membuat penempatan magang untuk `mahasiswa_id` target (Admin Prodi ter-scope prodinya sendiri, `dokumenPenerimaan` & `dokumenPraKRS` **opsional**, `status_magang` opsional default `'draft'`).
+- **Validasi Periode & Anti-Duplikat:**
+  - Mendukung `periode_id` dari master **atau** `semester_magang` dinamis (`integer >= 1`, tidak lagi di-hardcode 6/7).
+  - Mahasiswa boleh memiliki riwayat multi-periode; pendaftaran ulang pada periode yang sama ditolak `422` **kecuali** pengajuan sebelumnya berstatus `'ditolak'`.
 
 ---
 
-## 5. Update Magang
+## 4. Update Magang & Status
 
-- **HTTP Method:** `PUT` / `POST`
-- **Endpoint:** `/api/magang/{id}`
-- **Purpose:** Update magang data.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Request Body (Multipart/form-data if uploading)
-| Field | Type | Description |
-|-------|------|-------------|
-| `mahasiswa_id` | integer | (Optional) |
-| `mitra_id` | integer | (Optional) |
-| `dosbing_id` | integer | (Optional) |
-| `semester_magang` | integer | (Optional) Must be 6 or 7. |
-| `status_magang` | string | (Optional) `draft`, `berlangsung`, `selesai`, `ditolak`. |
-
-### Response (Success)
-- **Status Code:** `200 OK`
+- **HTTP Method:** `PUT` / `PATCH` / `POST` (`/api/magang/{id}` atau `/api/magang/{id}/status`)
+- **Aturan Otorisasi:**
+  - **Mahasiswa dilarang (`403`)** mengirim `status_magang` atau `status`.
+  - Saat status sudah `'berlangsung'` atau `'selesai'`, mahasiswa dilarang (`422`) mengubah mitra atau periode magangnya.
+  - **Admin Prodi & Super Admin** dapat memperbarui status magang (mendukung alias seperti `belum_mulai`, `sedang_magang`, `berjalan`, `revisi` yang dinormalisasi ke `draft` / `berlangsung` / `selesai` / `ditolak`).
 
 ---
 
-## 6. Delete Magang
+## 5. Delete Magang (Proteksi Berjenjang)
 
 - **HTTP Method:** `DELETE`
 - **Endpoint:** `/api/magang/{id}`
-- **Purpose:** Delete a magang record.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Response (Success)
-- **Status Code:** `200 OK`
-- **Body Example:**
-```json
-{
-  "message": "Data magang berhasil dihapus"
-}
-```
-**Implementation Note:** Lacks ownership validation. Any user can delete any magang record.
+- **Aturan:**
+  - **Mahasiswa:** hanya boleh menghapus magang miliknya yang berstatus `'draft'` atau `'ditolak'` dan belum memiliki laporan, penilaian mitra, atau jadwal presentasi (`422` jika `'berlangsung'` / `'selesai'`).
+  - **Admin Prodi:** hanya untuk magang prodinya yang berstatus `'draft'` atau `'ditolak'`; ditolak (`422`) untuk `'berlangsung'` / `'selesai'` (arahkan ke edit atau ubah status ke `'ditolak'`).
+  - **Super Admin:** diizinkan menghapus sebagai override koreksi darurat.
 
 ---
 
-## 7. Export Magang to Excel
+## 6. Export Magang to Excel
 
 - **HTTP Method:** `GET`
 - **Endpoint:** `/api/magang/export/excel`
-- **Purpose:** Export list to excel.
-- **Query Parameters:** `angkatan`, `semester_magang`
-- **Status Code:** `200 OK` (File Download)
+- **Role:** `super_admin`, `admin` (ter-scope prodi), `mitra` (ter-scope mitra). (`mahasiswa` ditolak `403`).
+- **Query Parameters:** `angkatan`, `prodi_id` (Super Admin), `mitra_id`, `tahun_ajaran_id`, `periode_id`, `tahun_ajaran`, `jenis_semester`, `semester_magang`, `dosbing_id`, `status_magang`.
+- **Format Output:**
+  - **1 sheet** Excel terurut/dikelompokkan berdasarkan `Tahun Ajaran` (terbaru lebih dulu), `Jenis Semester`, `Semester`, dan `NIM`.
+  - Memuat kolom tambahan: `Prodi`, `Tahun Ajaran`, `Periode`, `Semester`, dan `Status Magang`.
+  - Bug akses relasi `logbook?->first()` & `laporan?->first()` telah diperbaiki agar tiap baris hanya menampilkan logbook/foto/laporan milik magang bersangkutan.
+  - Karakter `/` pada `tahun_ajaran` (contoh `2026/2027`) disanitasi menjadi `-` pada filename header `Content-Disposition`.

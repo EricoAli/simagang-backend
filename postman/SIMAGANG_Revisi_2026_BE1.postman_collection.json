@@ -1,0 +1,333 @@
+{
+  "info": {
+    "_postman_id": "a7f2c4e1-8b93-4e21-9d4f-20261126be01",
+    "name": "SIMAGANG - Revisi 2026 BE 1 (Periode, Prodi, Magang, Presentasi PI, Export)",
+    "description": "Koleksi Postman untuk memverifikasi seluruh endpoint baru dan revisi BE 1 (Nov 2026) terhadap backend Laravel 13 dan kontrak FE SIMAGANG DTEDI.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000/api", "type": "string" },
+    { "key": "super_admin_token", "value": "", "type": "string" },
+    { "key": "admin_token", "value": "", "type": "string" },
+    { "key": "mahasiswa_token", "value": "", "type": "string" },
+    { "key": "mitra_token", "value": "", "type": "string" },
+    { "key": "tahun_ajaran_id", "value": "", "type": "string" },
+    { "key": "periode_id", "value": "", "type": "string" },
+    { "key": "magang_id", "value": "", "type": "string" },
+    { "key": "jadwal_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "00 - Auth",
+      "item": [
+        {
+          "name": "Login Admin TRPL",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const d = pm.response.json();",
+                "if (d.access_token) pm.collectionVariables.set('admin_token', d.access_token);",
+                "pm.test('admin.prodi loaded', () => pm.expect(d.user?.admin?.prodi?.kode_prodi).to.be.a('string'));"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin_trpl\",\n  \"password\": \"trpladmin123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login Super Admin",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const d = pm.response.json();",
+                "if (d.access_token) pm.collectionVariables.set('super_admin_token', d.access_token);"
+              ]
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"superadmin\",\n  \"password\": \"GANTI_DENGAN_PASSWORD_SUPERADMIN\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Master Prodi, Tahun Ajaran & Periode Magang",
+      "item": [
+        {
+          "name": "GET Prodi Catalog",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const d = pm.response.json();",
+                "pm.test('4 prodi returned', () => pm.expect(d.data.length).to.eql(4));"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/prodi", "host": ["{{base_url}}"], "path": ["prodi"] }
+          }
+        },
+        {
+          "name": "GET Tahun Ajaran",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/tahun-ajaran", "host": ["{{base_url}}"], "path": ["tahun-ajaran"] }
+          }
+        },
+        {
+          "name": "POST Tahun Ajaran (Super Admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const id = pm.response.json().data?.tahun_ajaran_id;",
+                "if (id) pm.collectionVariables.set('tahun_ajaran_id', id);"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tahun_ajaran\": \"2028/2029\",\n  \"is_active\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/tahun-ajaran", "host": ["{{base_url}}"], "path": ["tahun-ajaran"] }
+          }
+        },
+        {
+          "name": "PUT Toggle Tahun Ajaran is_active",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"is_active\": false\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/tahun-ajaran/{{tahun_ajaran_id}}", "host": ["{{base_url}}"], "path": ["tahun-ajaran", "{{tahun_ajaran_id}}"] }
+          }
+        },
+        {
+          "name": "GET Periode Magang",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/periode-magang?is_active=1", "host": ["{{base_url}}"], "path": ["periode-magang"], "query": [{ "key": "is_active", "value": "1" }] }
+          }
+        },
+        {
+          "name": "POST Periode Magang (Super Admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const id = pm.response.json().data?.periode_id;",
+                "if (id) pm.collectionVariables.set('periode_id', id);"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tahun_ajaran_id\": {{tahun_ajaran_id}},\n  \"semester_magang\": 8,\n  \"jenis_semester\": \"Genap\",\n  \"is_active\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/periode-magang", "host": ["{{base_url}}"], "path": ["periode-magang"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Dashboard Admin & Super Admin",
+      "item": [
+        {
+          "name": "GET Dashboard Admin (with aktivitas_terbaru)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const d = pm.response.json();",
+                "pm.test('aktivitas_terbaru array present', () => pm.expect(d.aktivitas_terbaru).to.be.an('array'));"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/dashboard/admin", "host": ["{{base_url}}"], "path": ["dashboard", "admin"] }
+          }
+        },
+        {
+          "name": "GET Dashboard Super Admin (filter periode_id)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/super-admin/dashboard?periode_id={{periode_id}}", "host": ["{{base_url}}"], "path": ["super-admin", "dashboard"], "query": [{ "key": "periode_id", "value": "{{periode_id}}" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Magang & Export Excel",
+      "item": [
+        {
+          "name": "GET Magang List (Filter Periode, Dosbing, Status)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/magang?per_page=10", "host": ["{{base_url}}"], "path": ["magang"], "query": [{ "key": "per_page", "value": "10" }] }
+          }
+        },
+        {
+          "name": "PUT Magang Status (Blocked for Mahasiswa 403)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{mahasiswa_token}}", "type": "string" }] },
+            "method": "PUT",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status_magang\": \"berlangsung\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/magang/{{magang_id}}", "host": ["{{base_url}}"], "path": ["magang", "{{magang_id}}"] }
+          }
+        },
+        {
+          "name": "GET Magang Export Excel (1 Sheet Grouped Tahun Ajaran)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{super_admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }],
+            "url": { "raw": "{{base_url}}/magang/export/excel?tahun_ajaran=2026/2027", "host": ["{{base_url}}"], "path": ["magang", "export", "excel"], "query": [{ "key": "tahun_ajaran", "value": "2026/2027" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Presentasi PI Multi-Peserta & Advisees",
+      "item": [
+        {
+          "name": "GET Jadwal Presentasi (Filter dosbing_id & periode_id)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/jadwal-presentasi", "host": ["{{base_url}}"], "path": ["jadwal-presentasi"] }
+          }
+        },
+        {
+          "name": "POST Sesi Presentasi (Tanpa magang_id + dosen_penguji_id)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const id = pm.response.json().data?.jadwal_id;",
+                "if (id) pm.collectionVariables.set('jadwal_id', id);"
+              ]
+            }
+          }],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"dosen_penguji_id\": 1,\n  \"tanggal_presentasi\": \"2026-12-10\",\n  \"waktu_mulai\": \"09:00\",\n  \"waktu_selesai\": \"11:00\",\n  \"ruangan\": \"Lab RPL 1\",\n  \"keterangan\": \"Sesi Presentasi PI\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/jadwal-presentasi", "host": ["{{base_url}}"], "path": ["jadwal-presentasi"] }
+          }
+        },
+        {
+          "name": "GET Mahasiswa Eligible for Sesi",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}/mahasiswa-eligible", "host": ["{{base_url}}"], "path": ["jadwal-presentasi", "{{jadwal_id}}", "mahasiswa-eligible"] }
+          }
+        },
+        {
+          "name": "POST Tambah Peserta Sesi",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"magang_id\": {{magang_id}}\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}/peserta", "host": ["{{base_url}}"], "path": ["jadwal-presentasi", "{{jadwal_id}}", "peserta"] }
+          }
+        },
+        {
+          "name": "GET Peserta Sesi",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}/peserta", "host": ["{{base_url}}"], "path": ["jadwal-presentasi", "{{jadwal_id}}", "peserta"] }
+          }
+        },
+        {
+          "name": "DELETE Peserta Sesi",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "DELETE",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/jadwal-presentasi/{{jadwal_id}}/peserta/{{magang_id}}", "host": ["{{base_url}}"], "path": ["jadwal-presentasi", "{{jadwal_id}}", "peserta", "{{magang_id}}"] }
+          }
+        },
+        {
+          "name": "GET Advisees",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/jadwal-presentasi/advisees?dosbing_id=1", "host": ["{{base_url}}"], "path": ["jadwal-presentasi", "advisees"], "query": [{ "key": "dosbing_id", "value": "1" }] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Mitra, Penilaian Mitra & Dosbing Filter",
+      "item": [
+        {
+          "name": "GET Mitra (Filter periode_id & search q)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/mitra?periode_id=1", "host": ["{{base_url}}"], "path": ["mitra"], "query": [{ "key": "periode_id", "value": "1" }] }
+          }
+        },
+        {
+          "name": "GET Dosbing (Prodi scoped)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{admin_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/dosbing", "host": ["{{base_url}}"], "path": ["dosbing"] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,136 +1,59 @@
 # ADM Presentasi PI API Reference
 
-**Status:** IMPLEMENTED — BROKEN/DISCONNECTED
-**Note:** The schema `jadwal_presentasi` lacks `magang_id` or `mahasiswa_id`. A schedule can be created, but it cannot be linked to a specific student's presentation.
+**Status:** IMPLEMENTED — TESTED
+**Authentication:** Bearer Token (Sanctum)
 
 ---
 
-## 1. Get List of Jadwal Presentasi
+## 1. List Jadwal Presentasi
 
 - **HTTP Method:** `GET`
 - **Endpoint:** `/api/jadwal-presentasi`
-- **Purpose:** Retrieve a paginated list of presentation schedules.
-- **Authentication:** Bearer Token (Sanctum)
-- **Role:** Admin, Mahasiswa, Mitra, Dosbing
+- **Role:** `super_admin` (semua + historis), `admin` (ter-scope prodi), `mahasiswa` (hanya sesi yang mengikutsertakan dirinya). (`dosbing` & `mitra` → `403`).
 
 ### Query Parameters
 | Parameter | Type | Description |
-|-----------|------|-------------|
-| `status` | string | (Optional) Filter by status (`terjadwal`, `selesai`, `dibatalkan`). |
-| `tanggal_presentasi` | date (Y-m-d) | (Optional) Filter by date. |
-| `per_page` | integer | (Optional) Number of items per page. Default: 15. |
+|---|---|---|
+| `status` | string | `terjadwal`, `selesai`, `dibatalkan` |
+| `tanggal_presentasi` | date | Format `Y-m-d` |
+| `magang_id` | integer | Jadwal yang berelasi langsung atau via tabel peserta |
+| `mahasiswa_id` | integer | Filter per mahasiswa |
+| `dosbing_id` | integer | Filter mahasiswa bimbingan dosen pembimbing terkait |
+| `dosen_penguji_id` | integer | Filter berdasarkan dosen penguji |
+| `periode_id` | integer | Filter periode magang |
+| `tahun_ajaran_id` | integer | Filter tahun ajaran |
+| `semester_magang` | integer | Filter semester |
+| `q` | string | Cari ruangan, keterangan, nama penguji, nama/NIM peserta |
+| `per_page` | integer | Default `15` (maks `500`) |
 
-### Response (Success)
-- **Status Code:** `200 OK`
-- **Body Example:**
-```json
-{
-  "current_page": 1,
-  "data": [
-    {
-      "jadwal_id": 1,
-      "tanggal_presentasi": "2026-10-15",
-      "waktu_mulai": "09:00",
-      "waktu_selesai": "11:00",
-      "tempat": null,
-      "ruangan": "Ruang Rapat 1",
-      "keterangan": "Presentasi akhir",
-      "status": "terjadwal",
-      "created_at": "...",
-      "updated_at": "..."
-    }
-  ],
-  "per_page": 15
-}
-```
+### Atribut Tambahan pada Item Jadwal
+- `dosen_penguji_id`, `dosen_penguji` (string nama), `dosen_penguji_data` (objek penguji), `prodi_id`, `status`, `peserta_count`, `jumlah_peserta`, `peserta_magang`.
 
 ---
 
-## 2. Get Jadwal Presentasi Detail
+## 2. Detail, Create, Update, Delete Sesi Presentasi
 
-- **HTTP Method:** `GET`
-- **Endpoint:** `/api/jadwal-presentasi/{id}`
-- **Purpose:** Retrieve details of a specific schedule.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Response (Success)
-- **Status Code:** `200 OK`
-
----
-
-## 3. Create Jadwal Presentasi
-
-- **HTTP Method:** `POST`
-- **Endpoint:** `/api/jadwal-presentasi`
-- **Purpose:** Create a new presentation schedule.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Request Body (JSON or Form-Data)
-| Field | Type | Description |
-|-------|------|-------------|
-| `tanggal_presentasi` | date | **Required.** Format: Y-m-d |
-| `waktu_mulai` | string | **Required.** Format: H:i |
-| `waktu_selesai` | string | **Required.** Format: H:i (Must be after `waktu_mulai`) |
-| `ruangan` | string | **Required.** Max 100 chars. |
-| `keterangan` | string | (Optional) |
-
-**Note:** No `magang_id` is accepted or validated because the database table lacks this column.
-
-### Response (Success)
-- **Status Code:** `201 Created`
-- **Body Example:**
-```json
-{
-  "message": "Jadwal presentasi berhasil dibuat",
-  "data": { ... }
-}
-```
-
-### Response (Error)
-- **Status Code:** `422 Unprocessable Entity`
-- **Body Example:**
-```json
-{
-  "title": "Validasi gagal",
-  "message": "Waktu mulai tidak dapat melebihi waktu akhir"
-}
-```
+- `GET /api/jadwal-presentasi/{id}` (`admin` ditolak `403` pada jadwal historis `magang_id = NULL && prodi_id = NULL` tanpa peserta).
+- `POST /api/jadwal-presentasi` (**Role:** `admin`, `super_admin`):
+  - `magang_id` sekarang **opsional (`nullable`)** agar Admin dapat membuat sesi presentasi lalu menambahkan multi-peserta lewat `DetailSesi`.
+  - `dosen_penguji_id` (`nullable|exists:dosen_pembimbing,dosbing_id`): jika `magang_id` diisi, divalidasi agar `dosen_penguji_id !== magang.dosbing_id` (`422`).
+- `PUT /api/jadwal-presentasi/{id}` (**Role:** `admin`, `super_admin`):
+  - Mendukung pembaruan `dosen_penguji_id`, `tanggal_presentasi`, `waktu_mulai`, `waktu_selesai`, `ruangan`, `keterangan`, `status`, serta `magang_id` opsional dengan validasi penguji ≠ pembimbing peserta.
+- `DELETE /api/jadwal-presentasi/{id}` (**Role:** `admin`, `super_admin`).
 
 ---
 
-## 4. Update Jadwal Presentasi
+## 3. Manajemen Peserta Sesi Presentasi (Multi-Peserta)
 
-- **HTTP Method:** `PUT`
-- **Endpoint:** `/api/jadwal-presentasi/{id}`
-- **Purpose:** Update existing presentation schedule.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Request Body (JSON)
-| Field | Type | Description |
-|-------|------|-------------|
-| `tanggal_presentasi` | date | (Optional) |
-| `waktu_mulai` | string | (Optional) |
-| `waktu_selesai` | string | (Optional) |
-| `ruangan` | string | **Required.** |
-| `keterangan` | string | (Optional) |
-
-### Response (Success)
-- **Status Code:** `200 OK`
+- `GET /api/jadwal-presentasi/{id}/peserta` — Daftar peserta tergabung (dari pivot `jadwal_presentasi_peserta` & legacy `magang_id`).
+- `GET /api/jadwal-presentasi/{id}/mahasiswa-eligible` (**Role:** `admin`, `super_admin`) — Mahasiswa magang berstatus `'berlangsung'` pada prodi terkait yang belum masuk sesi ini dan bukan bimbingan dari `dosen_penguji_id` sesi (`?dosbing_id=`, `?periode_id=`).
+- `POST /api/jadwal-presentasi/{id}/peserta` (**Role:** `admin`, `super_admin`) — Body `{ "magang_id": <int> }`. Menolak `403` lintas prodi dan `422` jika duplikat atau `dosbing_id === dosen_penguji_id`.
+- `DELETE /api/jadwal-presentasi/{id}/peserta/{magangId}` (**Role:** `admin`, `super_admin`) — Mengeluarkan peserta dari sesi.
 
 ---
 
-## 5. Delete Jadwal Presentasi
+## 4. Daftar Mahasiswa Bimbingan / Penjadwalan
 
-- **HTTP Method:** `DELETE`
-- **Endpoint:** `/api/jadwal-presentasi/{id}`
-- **Purpose:** Delete a schedule.
-- **Authentication:** Bearer Token (Sanctum)
-
-### Response (Success)
-- **Status Code:** `200 OK`
-- **Body Example:**
-```json
-{
-  "message": "Jadwal presentasi berhasil dihapus"
-}
-```
+- `GET /api/jadwal-presentasi/advisees` (**Role:** `admin`, `super_admin`, `dosbing`)
+- **Query Parameters:** `dosbing_id`, `periode_id`, `tahun_ajaran_id`, `q`
+- Mengembalikan status penjadwalan masing-masing magang (`belum_dijadwalkan`, `sudah_dijadwalkan`, `selesai`, `bisa_dijadwalkan`, `jadwal_id`).
