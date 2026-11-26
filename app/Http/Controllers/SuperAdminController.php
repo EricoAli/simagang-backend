@@ -7,6 +7,7 @@ use App\Models\Dosbing;
 use App\Models\Magang;
 use App\Models\Mahasiswa;
 use App\Models\Mitra;
+use App\Models\PeriodeMagang;
 use App\Models\Prodi;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -234,11 +235,57 @@ class SuperAdminController extends Controller
     }
 
     /**
-     * Dashboard Super Admin: Statistik agregat 4 prodi dan filter per prodi.
+     * Dashboard Super Admin: Statistik agregat 4 prodi dan filter per prodi/periode.
      */
     public function dashboard(Request $request)
     {
         $prodiId = $request->query('prodi_id');
+        $periodeId = $request->query('periode_id');
+        $tahunAjaranId = $request->query('tahun_ajaran_id');
+
+        $activePeriodeIds = collect();
+        if (! $periodeId && ! $tahunAjaranId) {
+            $activePeriodeIds = PeriodeMagang::where('is_active', true)
+                ->whereHas('tahunAjaran', fn ($q) => $q->where('is_active', true))
+                ->pluck('periode_id');
+        }
+
+        $applyPeriodFilterToMagang = function ($query) use ($periodeId, $tahunAjaranId) {
+            if ($periodeId) {
+                $query->where('periode_id', $periodeId);
+            } elseif ($tahunAjaranId) {
+                $query->where('tahun_ajaran_id', $tahunAjaranId);
+            }
+        };
+
+        $applyPeriodFilterToMahasiswa = function ($query) use ($periodeId, $tahunAjaranId) {
+            if ($periodeId) {
+                $query->whereHas('magang', fn ($mq) => $mq->where('periode_id', $periodeId));
+            } elseif ($tahunAjaranId) {
+                $query->where(function ($q) use ($tahunAjaranId) {
+                    $q->where('tahun_ajaran_id', $tahunAjaranId)
+                        ->orWhereHas('magang', fn ($mq) => $mq->where('tahun_ajaran_id', $tahunAjaranId));
+                });
+            }
+        };
+
+        $countActiveInterns = function ($magangQuery) use ($periodeId, $tahunAjaranId, $activePeriodeIds) {
+            $activeQuery = (clone $magangQuery)->where('status_magang', 'berlangsung');
+            if (! $periodeId && ! $tahunAjaranId && $activePeriodeIds->isNotEmpty()
+                && (clone $activeQuery)->whereIn('periode_id', $activePeriodeIds)->exists()) {
+                $activeQuery->whereIn('periode_id', $activePeriodeIds);
+            }
+
+            return $activeQuery->distinct('mahasiswa_id')->count('mahasiswa_id');
+        };
+
+        $latestSemester = function ($magangQuery) {
+            return (clone $magangQuery)
+                ->orderByDesc('tahun_ajaran')
+                ->orderByDesc('semester_magang')
+                ->orderByDesc('magang_id')
+                ->value('semester_magang');
+        };
 
         // Jika filter prodi spesifik diberikan
         if ($prodiId && $prodiId !== 'all') {
@@ -250,12 +297,15 @@ class SuperAdminController extends Controller
             }
 
             $queryMagang = Magang::whereHas('mahasiswa', fn ($q) => $q->where('prodi_id', $prodiId));
-            $semesterMagangTerbaru = (clone $queryMagang)->latest('semester_magang')->value('semester_magang');
-            $jumlahMagangAktif = $semesterMagangTerbaru
-                ? (clone $queryMagang)->where('semester_magang', $semesterMagangTerbaru)->count()
-                : 0;
+            $applyPeriodFilterToMagang($queryMagang);
 
-            $jumlahMahasiswa = Mahasiswa::where('prodi_id', $prodiId)->count();
+            $queryMahasiswa = Mahasiswa::where('prodi_id', $prodiId);
+            $applyPeriodFilterToMahasiswa($queryMahasiswa);
+
+            $semesterMagangTerbaru = $latestSemester($queryMagang);
+            $jumlahMagangAktif = $countActiveInterns($queryMagang);
+
+            $jumlahMahasiswa = $queryMahasiswa->count();
             $jumlahAdmin = Admin::where('prodi_id', $prodiId)->count();
             $jumlahMitra = Mitra::count(); // Mitra institusional DTEDI
             $jumlahDosbing = Dosbing::count(); // Dosen pembimbing DTEDI
@@ -279,12 +329,16 @@ class SuperAdminController extends Controller
         }
 
         // Agregat seluruh prodi (default)
-        $semesterMagangTerbaru = Magang::latest('semester_magang')->value('semester_magang');
-        $totalMagangAktif = $semesterMagangTerbaru
-            ? Magang::where('semester_magang', $semesterMagangTerbaru)->count()
-            : 0;
+        $allMagangQuery = Magang::query();
+        $applyPeriodFilterToMagang($allMagangQuery);
 
-        $totalMahasiswa = Mahasiswa::count();
+        $allMahasiswaQuery = Mahasiswa::query();
+        $applyPeriodFilterToMahasiswa($allMahasiswaQuery);
+
+        $semesterMagangTerbaru = $latestSemester($allMagangQuery);
+        $totalMagangAktif = $countActiveInterns($allMagangQuery);
+
+        $totalMahasiswa = $allMahasiswaQuery->count();
         $totalMitra = Mitra::count();
         $totalDosbing = Dosbing::count();
         $totalAdmin = Admin::count();
@@ -295,17 +349,17 @@ class SuperAdminController extends Controller
 
         foreach ($prodis as $p) {
             $pMagangQuery = Magang::whereHas('mahasiswa', fn ($q) => $q->where('prodi_id', $p->prodi_id));
-            $pSemesterTerbaru = (clone $pMagangQuery)->latest('semester_magang')->value('semester_magang');
-            $pMagangAktif = $pSemesterTerbaru
-                ? (clone $pMagangQuery)->where('semester_magang', $pSemesterTerbaru)->count()
-                : 0;
+            $applyPeriodFilterToMagang($pMagangQuery);
+
+            $pMhsQuery = Mahasiswa::where('prodi_id', $p->prodi_id);
+            $applyPeriodFilterToMahasiswa($pMhsQuery);
 
             $breakdownProdi[] = [
                 'prodi_id' => $p->prodi_id,
                 'kode_prodi' => $p->kode_prodi,
                 'nama_prodi' => $p->nama_prodi,
-                'jumlah_mahasiswa' => Mahasiswa::where('prodi_id', $p->prodi_id)->count(),
-                'jumlah_mahasiswa_aktif_magang' => $pMagangAktif,
+                'jumlah_mahasiswa' => $pMhsQuery->count(),
+                'jumlah_mahasiswa_aktif_magang' => $countActiveInterns($pMagangQuery),
                 'jumlah_admin_prodi' => Admin::where('prodi_id', $p->prodi_id)->count(),
             ];
         }

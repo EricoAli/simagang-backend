@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DokumenMagang;
 use App\Models\Laporan;
 use App\Models\Mahasiswa;
+use App\Models\PeriodeMagang;
 use App\Models\NilaiMitra;
 use Illuminate\Http\Request;
 use App\Models\Magang;
@@ -24,34 +25,87 @@ class DashboardController extends Controller
 
         $queryMahasiswa = Mahasiswa::query();
         $queryMagang = Magang::query();
+        $prodiId = null;
 
         if ($user->role === 'admin') {
             $prodiId = optional($user->admin)->prodi_id;
             if (!$prodiId) {
                 return response()->json(['message' => 'Admin tidak memiliki prodi'], 403);
             }
+        } elseif ($request->filled('prodi_id') && $request->query('prodi_id') !== 'all') {
+            $prodiId = $request->query('prodi_id');
+        }
+
+        if ($prodiId) {
             $queryMahasiswa->where('prodi_id', $prodiId);
-            $queryMagang->whereHas('mahasiswa', fn($q) => $q->where('prodi_id', $prodiId));
+            $queryMagang->whereHas('mahasiswa', fn ($q) => $q->where('prodi_id', $prodiId));
         }
 
-        $SemesterMagangTerbaru = (clone $queryMagang)->latest('semester_magang')->value('semester_magang');
+        $periodeId = $request->query('periode_id');
+        $tahunAjaranId = $request->query('tahun_ajaran_id');
 
-        if ($SemesterMagangTerbaru) {
-            $jumlahMagangAktif = (clone $queryMagang)->where('semester_magang', $SemesterMagangTerbaru)
-                ->count();
-        } else {
-            $jumlahMagangAktif = 0;
+        if ($periodeId) {
+            $queryMagang->where('periode_id', $periodeId);
+            $queryMahasiswa->whereHas('magang', fn ($q) => $q->where('periode_id', $periodeId));
+        } elseif ($tahunAjaranId) {
+            $queryMagang->where('tahun_ajaran_id', $tahunAjaranId);
+            $queryMahasiswa->where(function ($q) use ($tahunAjaranId) {
+                $q->where('tahun_ajaran_id', $tahunAjaranId)
+                    ->orWhereHas('magang', fn ($mq) => $mq->where('tahun_ajaran_id', $tahunAjaranId));
+            });
         }
 
+        $activeMagangQuery = (clone $queryMagang)->where('status_magang', 'berlangsung');
+        if (!$periodeId && !$tahunAjaranId) {
+            $activePeriodeIds = PeriodeMagang::where('is_active', true)
+                ->whereHas('tahunAjaran', fn ($q) => $q->where('is_active', true))
+                ->pluck('periode_id');
+
+            if ($activePeriodeIds->isNotEmpty() && (clone $activeMagangQuery)->whereIn('periode_id', $activePeriodeIds)->exists()) {
+                $activeMagangQuery->whereIn('periode_id', $activePeriodeIds);
+            }
+        }
+
+        $jumlahMagangAktif = $activeMagangQuery->distinct('mahasiswa_id')->count('mahasiswa_id');
         $jumlahMahasiswa = $queryMahasiswa->count();
         $jumlahMitra = Mitra::count();
         $jumlahDosbing = Dosbing::count();
+
+        $aktivitasTerbaru = (clone $queryMagang)
+            ->with(['mahasiswa.prodi', 'mitra'])
+            ->whereIn('status_magang', ['berlangsung', 'selesai'])
+            ->orderByDesc('updated_at')
+            ->orderByDesc('magang_id')
+            ->limit(5)
+            ->get()
+            ->map(function ($item) {
+                return [
+                    'magang_id' => $item->magang_id,
+                    'nama_mahasiswa' => $item->mahasiswa?->nama,
+                    'nim' => $item->mahasiswa?->nim,
+                    'status_magang' => $item->status_magang,
+                    'status_label' => match ($item->status_magang) {
+                        'draft' => 'Belum Mulai',
+                        'berlangsung' => 'Sedang Magang',
+                        'selesai' => 'Selesai',
+                        'ditolak' => 'Ditolak',
+                        default => $item->status_magang,
+                    },
+                    'nama_prodi' => $item->mahasiswa?->prodi?->nama_prodi,
+                    'kode_prodi' => $item->mahasiswa?->prodi?->kode_prodi,
+                    'nama_mitra' => $item->mitra?->nama_mitra,
+                    'tanggal_mulai' => $item->tanggal_mulai,
+                    'tanggal_selesai' => $item->tanggal_selesai,
+                ];
+            })
+            ->values();
 
         return response()->json([
             'jumlah_mahasiswa_aktif_magang' => $jumlahMagangAktif,
             'jumlah_mahasiswa' => $jumlahMahasiswa,
             'jumlah_mitra' => $jumlahMitra,
             'jumlah_dosbing' => $jumlahDosbing,
+            'aktivitas_terbaru' => $aktivitasTerbaru,
         ], 200);
     }
 
