@@ -6,8 +6,11 @@ use App\Models\Admin;
 use App\Models\Magang;
 use App\Models\Mahasiswa;
 use App\Models\Mitra;
+use App\Models\PeriodeMagang;
 use App\Models\Prodi;
+use App\Models\TahunAjaran;
 use App\Models\User;
+use Database\Seeders\PeriodeMagangSeeder;
 use Database\Seeders\ProdiSeeder;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\DB;
@@ -358,5 +361,57 @@ class MitraTest extends TestCase
             ->assertStatus(422);
 
         $this->assertDatabaseHas('mitra', ['mitra_id' => $mitraA->mitra_id, 'email' => $mitraA->email]);
+    }
+
+    public function test_mitra_index_filters_by_periode_and_searches_scoped_interns_without_leaking_other_prodi()
+    {
+        $this->seed(PeriodeMagangSeeder::class);
+
+        $adminTRPL = $this->createAdmin($this->prodiTRPL->prodi_id);
+        [, $mhsTRPL] = $this->createMahasiswa($this->prodiTRPL->prodi_id);
+        [, $mhsTRIK] = $this->createMahasiswa($this->prodiTRIK->prodi_id);
+
+        $mhsTRPL->update(['nama' => 'Budi Santoso TRPL']);
+        $mhsTRIK->update(['nama' => 'Siti Rahayu TRIK']);
+
+        [, $mitraSatu] = $this->createMitra('PT Mitra Satu');
+        [, $mitraDua] = $this->createMitra('PT Mitra Dua');
+
+        $periode6 = PeriodeMagang::whereHas('tahunAjaran', fn ($q) => $q->where('tahun_ajaran', '2026/2027'))
+            ->where('semester_magang', 6)
+            ->firstOrFail();
+        $periode7 = PeriodeMagang::whereHas('tahunAjaran', fn ($q) => $q->where('tahun_ajaran', '2025/2026'))
+            ->where('semester_magang', 7)
+            ->firstOrFail();
+
+        Magang::create([
+            'mahasiswa_id' => $mhsTRPL->mahasiswa_id,
+            'mitra_id' => $mitraSatu->mitra_id,
+            'periode_id' => $periode6->periode_id,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        Magang::create([
+            'mahasiswa_id' => $mhsTRIK->mahasiswa_id,
+            'mitra_id' => $mitraDua->mitra_id,
+            'periode_id' => $periode7->periode_id,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        // Admin TRPL filter periode6 -> hanya PT Mitra Satu
+        $resPeriode = $this->actingAs($adminTRPL)->getJson("/api/mitra?periode_id={$periode6->periode_id}");
+        $resPeriode->assertStatus(200);
+        $ids = collect($resPeriode->json('data'))->pluck('mitra_id')->all();
+        $this->assertEquals([$mitraSatu->mitra_id], $ids);
+
+        // Search nama mahasiswa prodi sendiri -> ketemu PT Mitra Satu
+        $resSearchOwn = $this->actingAs($adminTRPL)->getJson('/api/mitra?q=Budi Santoso');
+        $resSearchOwn->assertStatus(200);
+        $this->assertEquals([$mitraSatu->mitra_id], collect($resSearchOwn->json('data'))->pluck('mitra_id')->all());
+
+        // Search nama mahasiswa prodi lain -> tidak membocorkan PT Mitra Dua ke Admin TRPL
+        $resSearchOther = $this->actingAs($adminTRPL)->getJson('/api/mitra?q=Siti Rahayu');
+        $resSearchOther->assertStatus(200);
+        $this->assertCount(0, $resSearchOther->json('data'));
     }
 }

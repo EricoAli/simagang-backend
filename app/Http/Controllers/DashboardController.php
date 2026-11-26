@@ -117,16 +117,35 @@ class DashboardController extends Controller
         }
 
         $mitraId = $user->mitra->mitra_id;
+        $periodeId = $request->query('periode_id');
+        $tahunAjaranId = $request->query('tahun_ajaran_id');
+        $semesterMagang = $request->query('semester_magang');
 
-        $jumlahMahasiswaMagangByMitra = Magang::where('mitra_id', $mitraId)
+        $applyMagangFilter = function ($query) use ($mitraId, $periodeId, $tahunAjaranId, $semesterMagang) {
+            $query->where('mitra_id', $mitraId);
+            if ($periodeId) {
+                $query->where('periode_id', $periodeId);
+            }
+            if ($tahunAjaranId) {
+                $query->where('tahun_ajaran_id', $tahunAjaranId);
+            }
+            if ($semesterMagang) {
+                $query->where('semester_magang', (int) $semesterMagang);
+            }
+        };
+
+        $magangQuery = Magang::query();
+        $applyMagangFilter($magangQuery);
+
+        $jumlahMahasiswaMagangByMitra = (clone $magangQuery)
             ->distinct('mahasiswa_id')
             ->count('mahasiswa_id');
 
-        $jumlahPenilaian = NilaiMitra::whereHas('magang', function ($query) use ($mitraId) {
-            $query->where('mitra_id', $mitraId);
+        $jumlahPenilaian = NilaiMitra::whereHas('magang', function ($query) use ($applyMagangFilter) {
+            $applyMagangFilter($query);
         })->count();
 
-        $jumlahMagang = Magang::where('mitra_id', $mitraId)->count();
+        $jumlahMagang = (clone $magangQuery)->count();
 
         return response()->json([
             'jumlah_mahasiswa_magang_by_mitra' => $jumlahMahasiswaMagangByMitra,
