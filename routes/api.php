@@ -137,6 +137,7 @@ Route::prefix('magang')
         // Route::get('/aktif/jumlah', 'jumlahMagangAktif');
         Route::get('/', 'index');
         Route::get('/export/excel',  'exportExcel');
+        Route::get('/export/zip', 'exportZip');
         Route::post('/', 'store');
         Route::get('/{id}', 'show');
         Route::get('/{id}/detail', 'showDetail');

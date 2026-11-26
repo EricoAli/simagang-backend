@@ -22,6 +22,7 @@ use Illuminate\Validation\Rule;
 
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\MagangExportArchiveService;
 
 class MagangController extends Controller
 {
@@ -964,6 +965,96 @@ class MagangController extends Controller
         $fileName .= '.xlsx';
 
         return Excel::download(new MagangExport($angkatan, $semesterMagang, $mitraId, $prodiId, $mahasiswaId, $periodeId), $fileName);
+    }
+
+    /**
+     * Export data magang, logbook, dokumen, foto, dan lampiran dalam ZIP.
+     * Endpoint ini sengaja terpisah agar export Excel lama tetap kompatibel.
+     */
+    public function exportZip(Request $request, MagangExportArchiveService $archiveService)
+    {
+        $user = $request->user();
+        $periodeId = null;
+
+        if ($request->filled('periode_id')) {
+            $validator = Validator::make($request->only('periode_id'), [
+                'periode_id' => ['integer', 'exists:periode_magang,periode_id'],
+            ], [
+                'periode_id.exists' => 'Periode magang tidak ditemukan.',
+                'periode_id.integer' => 'ID periode magang harus berupa angka.',
+            ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validasi gagal.',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+            $periodeId = (int) $request->query('periode_id');
+        }
+
+        $mitraId = $request->query('mitra_id');
+        $mahasiswaId = null;
+        $prodiId = null;
+
+        if ($user?->role === 'mitra') {
+            $mitraId = optional($user->mitra)->mitra_id ?: -1;
+        } elseif ($user?->role === 'mahasiswa') {
+            $mahasiswaId = optional($user->mahasiswa)->mahasiswa_id ?: -1;
+        } elseif ($user?->role === 'dosbing') {
+            abort(403, 'Anda tidak berhak mengekspor data magang.');
+        } elseif ($user?->role === 'admin') {
+            $prodiId = $this->adminProdiId($user);
+            if (!$prodiId) {
+                abort(403, 'Admin tidak memiliki program studi.');
+            }
+        } elseif ($user?->role === 'super_admin' && $request->filled('prodi_id')) {
+            $validator = Validator::make($request->only('prodi_id'), [
+                'prodi_id' => ['integer', 'exists:prodi,prodi_id'],
+            ], [
+                'prodi_id.exists' => 'Program studi tidak ditemukan.',
+                'prodi_id.integer' => 'ID program studi harus berupa angka.',
+            ]);
+            if ($validator->fails()) {
+                return response()->json([
+                    'message' => 'Validasi gagal.',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+            $prodiId = (int) $request->query('prodi_id');
+        }
+
+        $filters = [
+            'angkatan' => $request->query('angkatan'),
+            'semester_magang' => $request->query('semester_magang'),
+            'periode_id' => $periodeId,
+            'mitra_id' => $mitraId,
+            'prodi_id' => $prodiId,
+            'mahasiswa_id' => $mahasiswaId,
+        ];
+
+        $archive = null;
+        try {
+            $archive = $archiveService->create($filters);
+
+            return response()->download(
+                $archive['path'],
+                $archive['filename'],
+                ['Content-Type' => 'application/zip']
+            )->deleteFileAfterSend(true);
+        } catch (\Throwable $exception) {
+            report($exception);
+            if ($archive && !empty($archive['path']) && is_file($archive['path'])) {
+                @unlink($archive['path']);
+            }
+            if ($exception instanceof \LengthException) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                ], 422);
+            }
+            return response()->json([
+                'message' => 'Export ZIP gagal diproses.',
+            ], 500);
+        }
     }
 
 

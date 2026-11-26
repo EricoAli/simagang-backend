@@ -39,6 +39,7 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
             'mahasiswa',
             'mitra',
             'dosenPembimbing',
+            'periode.tahunAjaran',
             'dokumenMagang' => function ($q) {
                 $q->whereIn('jenis_dokumen', ['doc_surat_penerimaan', 'doc_pra_krs']);
             },
@@ -90,6 +91,7 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
             'Nama',
             'NIM',
             'Perusahaan',
+            'Periode Magang',
             'Dosen Pembimbing',
             'Dokumen Penerimaan',
             'Dokumen Pra-KRS',
@@ -127,6 +129,7 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
             $magang->mahasiswa?->nama ?? '-',
             $magang->mahasiswa?->nim ?? '-',
             $magang->mitra?->nama_mitra ?? '-',
+            $this->periodeLabel($magang),
             $magang->dosenPembimbing?->nama ?? '-',
             $dokPenerimaan?->file_path ? $baseUrl . $dokPenerimaan->file_path : '-',
             $dokPraKRS?->file_path ? $baseUrl . $dokPraKRS->file_path : '-',
@@ -138,6 +141,23 @@ class MagangExport implements FromCollection, WithHeadings, WithMapping, WithSty
             $penilaian?->file_path ? $baseUrl . $penilaian->file_path : '-',
             $laporan?->file_path ? $baseUrl . $laporan->file_path : '-',
         ]);
+    }
+
+    private function periodeLabel(Magang $magang): string
+    {
+        $periode = $magang->periode;
+        if ($periode?->tahunAjaran?->tahun_ajaran) {
+            return $periode->tahunAjaran->tahun_ajaran
+                . ' - Semester ' . $periode->semester_magang
+                . ' ' . $periode->jenis_semester;
+        }
+
+        if ($magang->tahun_ajaran || $magang->semester_magang) {
+            return ($magang->tahun_ajaran ?: 'Tahun ajaran belum ditentukan')
+                . ' - Semester ' . ($magang->semester_magang ?: '-');
+        }
+
+        return 'Belum ditentukan';
     }
 
     public function styles(Worksheet $sheet): array

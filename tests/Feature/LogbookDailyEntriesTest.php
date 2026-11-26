@@ -92,6 +92,68 @@ class LogbookDailyEntriesTest extends TestCase
             ->assertJsonPath('data.logbook_id', $logbookId);
     }
 
+    public function test_logbook_rejects_six_photos_and_separate_upload_respects_five_photo_limit(): void
+    {
+        $sixPhotos = array_map(
+            fn ($index) => UploadedFile::fake()->image("photo-{$index}.jpg", 20, 20),
+            range(1, 6)
+        );
+
+        $this->actingAs($this->student)
+            ->postJson('/api/logbook', $this->logbookData(['foto' => $sixPhotos]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('foto');
+
+        $response = $this->actingAs($this->student)
+            ->postJson('/api/logbook', $this->logbookData([
+                'foto' => array_slice($sixPhotos, 0, 4),
+            ]))
+            ->assertCreated();
+        $logbookId = $response->json('data.logbook_id');
+
+        $this->actingAs($this->student)
+            ->post('/api/foto-magang', [
+                'logbook_id' => $logbookId,
+                'file' => UploadedFile::fake()->image('photo-5.jpg', 20, 20),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->actingAs($this->student)
+            ->post('/api/foto-magang', [
+                'logbook_id' => $logbookId,
+                'file' => UploadedFile::fake()->image('photo-6.jpg', 20, 20),
+            ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
+    }
+
+    public function test_deleting_one_photo_releases_a_slot_for_a_new_photo(): void
+    {
+        $response = $this->actingAs($this->student)
+            ->postJson('/api/logbook', $this->logbookData([
+                'foto' => array_map(
+                    fn ($index) => UploadedFile::fake()->image("photo-{$index}.jpg", 20, 20),
+                    range(1, 5)
+                ),
+            ]))
+            ->assertCreated();
+        $logbookId = $response->json('data.logbook_id');
+        $photoId = $response->json('data.foto_kegiatan.0.foto_id');
+
+        $this->actingAs($this->student)
+            ->deleteJson('/api/foto-magang/' . $photoId)
+            ->assertOk();
+
+        $this->actingAs($this->student)
+            ->post('/api/foto-magang', [
+                'logbook_id' => $logbookId,
+                'file' => UploadedFile::fake()->image('replacement.jpg', 20, 20),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->assertDatabaseCount('foto_kegiatan', 5);
+    }
+
     public function test_student_can_update_entry_and_remove_owned_documentation(): void
     {
         $response = $this->actingAs($this->student)

@@ -7,6 +7,7 @@ use App\Models\FotoMagang;
 use App\Models\Logbook;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 use Illuminate\Http\Request;
 
@@ -72,15 +73,47 @@ class FotoMagangController extends Controller
 
         $this->authorizeMagangAccess($request->user(), $logbook->magang);
 
-        // Simpan file
-        $path = $request->file('file')->store('foto_magang', 'public');
+        $storedPath = null;
+        try {
+            $foto = DB::transaction(function () use ($request, &$storedPath) {
+                $lockedLogbook = Logbook::whereKey($request->logbook_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        $foto = FotoMagang::create([
-            'logbook_id' => $request->logbook_id,
-            'nama_file' => $request->file('file')->getClientOriginalName(),
-            'file_path' => $path,
-            'keterangan' => $request->keterangan,
-        ]);
+                if ($lockedLogbook->fotoKegiatan()->count() >= 5) {
+                    throw new \DomainException('Entri logbook ini sudah memiliki 5 foto.');
+                }
+
+                $path = $request->file('file')->store('foto_magang', 'public');
+                if (!$path) {
+                    throw new \RuntimeException('Foto gagal disimpan.');
+                }
+                $storedPath = $path;
+
+                return FotoMagang::create([
+                    'logbook_id' => $lockedLogbook->logbook_id,
+                    'nama_file' => $request->file('file')->getClientOriginalName(),
+                    'file_path' => $path,
+                    'keterangan' => $request->keterangan,
+                ]);
+            });
+        } catch (\DomainException $exception) {
+            if ($storedPath) {
+                Storage::disk('public')->delete($storedPath);
+            }
+            return response()->json([
+                'message' => 'Maksimal 5 foto untuk setiap entri logbook.',
+                'errors' => ['file' => [$exception->getMessage()]],
+            ], 422);
+        } catch (\Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk('public')->delete($storedPath);
+            }
+            report($exception);
+            return response()->json([
+                'message' => 'Gagal menyimpan foto kegiatan.',
+            ], 500);
+        }
 
         return response()->json([
             'message' => 'Foto kegiatan berhasil diupload',
@@ -110,23 +143,41 @@ class FotoMagangController extends Controller
             ], 422);
         }
 
-        // Jika ada file baru, hapus file lama lalu simpan yang baru
+        $oldPath = $foto->file_path;
+        $newPath = null;
+
         if ($request->hasFile('file')) {
-            if ($foto->file_path && Storage::disk('public')->exists($foto->file_path)) {
-                Storage::disk('public')->delete($foto->file_path);
+            $newPath = $request->file('file')->store('foto_magang', 'public');
+            if (!$newPath) {
+                return response()->json(['message' => 'Foto gagal disimpan.'], 500);
             }
-
-            $path = $request->file('file')->store('foto_magang', 'public');
-
-            $foto->update([
-                'nama_file' => $request->file('file')->getClientOriginalName(),
-                'path_file' => $path,
-                'uploaded_at' => now(),
-            ]);
         }
 
-        if ($request->has('keterangan')) {
-            $foto->update(['keterangan' => $request->keterangan]);
+        try {
+            DB::transaction(function () use ($foto, $request, $newPath) {
+                $updates = [];
+                if ($newPath) {
+                    $updates += [
+                        'nama_file' => $request->file('file')->getClientOriginalName(),
+                        'file_path' => $newPath,
+                        'uploaded_at' => now(),
+                    ];
+                }
+                if ($request->has('keterangan')) {
+                    $updates['keterangan'] = $request->keterangan;
+                }
+                if ($updates) {
+                    $foto->update($updates);
+                }
+            });
+        } catch (\Throwable $exception) {
+            Storage::disk('public')->delete($newPath);
+            report($exception);
+            return response()->json(['message' => 'Gagal memperbarui foto kegiatan.'], 500);
+        }
+
+        if ($newPath && $oldPath && $oldPath !== $newPath) {
+            Storage::disk('public')->delete($oldPath);
         }
 
         return response()->json([
