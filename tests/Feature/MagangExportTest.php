@@ -4,11 +4,16 @@ namespace Tests\Feature;
 
 use App\Exports\MagangExport;
 use App\Models\Admin;
+use App\Models\FotoMagang;
+use App\Models\Laporan;
+use App\Models\Logbook;
 use App\Models\Magang;
 use App\Models\Mahasiswa;
 use App\Models\Mitra;
+use App\Models\PeriodeMagang;
 use App\Models\Prodi;
 use App\Models\User;
+use Database\Seeders\PeriodeMagangSeeder;
 use Database\Seeders\ProdiSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -166,5 +171,84 @@ class MagangExportTest extends TestCase
 
         $response = $this->actingAs($mhsUser)->get('/api/magang/export/excel');
         $response->assertStatus(403);
+    }
+
+    public function test_magang_export_groups_by_tahun_ajaran_fixes_logbook_laporan_relation_bug_and_sanitizes_filename()
+    {
+        $this->seed(PeriodeMagangSeeder::class);
+        $superAdmin = $this->createSuperAdmin();
+
+        [$u1, $mhs1] = $this->createMahasiswa($this->prodiTRPL->prodi_id, 'Alpha Old');
+        [$u2, $mhs2] = $this->createMahasiswa($this->prodiTRIK->prodi_id, 'Beta New');
+        [$mu, $mitra] = $this->createMitra('PT Export Testing');
+
+        $periodeOld = PeriodeMagang::whereHas('tahunAjaran', fn ($q) => $q->where('tahun_ajaran', '2025/2026'))
+            ->where('semester_magang', 7)
+            ->firstOrFail();
+        $periodeNew = PeriodeMagang::whereHas('tahunAjaran', fn ($q) => $q->where('tahun_ajaran', '2026/2027'))
+            ->where('semester_magang', 6)
+            ->firstOrFail();
+
+        $magangOld = Magang::create([
+            'mahasiswa_id' => $mhs1->mahasiswa_id,
+            'mitra_id' => $mitra->mitra_id,
+            'periode_id' => $periodeOld->periode_id,
+            'status_magang' => 'selesai',
+        ]);
+
+        $magangNew = Magang::create([
+            'mahasiswa_id' => $mhs2->mahasiswa_id,
+            'mitra_id' => $mitra->mitra_id,
+            'periode_id' => $periodeNew->periode_id,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        // Beri logbook & laporan HANYA ke $magangOld (record id lebih kecil)
+        // Bug lama `logbook?->first()` akan salah memberi data $magangOld ke $magangNew!
+        $lbOld = Logbook::create([
+            'magang_id' => $magangOld->magang_id,
+            'kegiatan' => 'Logbook khusus magang lama',
+        ]);
+        FotoMagang::create([
+            'logbook_id' => $lbOld->logbook_id,
+            'nama_file' => 'foto1.jpg',
+            'file_path' => 'foto/old1.jpg',
+        ]);
+        Laporan::create([
+            'magang_id' => $magangOld->magang_id,
+            'nama_file' => 'lap_old.pdf',
+            'file_path' => 'laporan/old.pdf',
+        ]);
+
+        $export = new MagangExport();
+        $rows = $export->collection();
+
+        // Terurut tahun ajaran desc: 2026/2027 ($magangNew) muncul sebelum 2025/2026 ($magangOld)
+        $this->assertEquals($magangNew->magang_id, $rows[0]->magang_id);
+        $this->assertEquals($magangOld->magang_id, $rows[1]->magang_id);
+
+        $mappedNew = $export->map($rows[0]);
+        $mappedOld = $export->map($rows[1]);
+
+        $headings = $export->headings();
+        $this->assertContains('Tahun Ajaran', $headings);
+        $this->assertContains('Periode', $headings);
+        $this->assertContains('Status Magang', $headings);
+
+        $foto1Idx = array_search('Foto Logbook 1', $headings, true);
+        $laporanIdx = array_search('Dokumen Laporan Magang', $headings, true);
+
+        // Mahasiswa kedua ($magangNew) tidak boleh mewarisi foto/laporan milik $magangOld
+        $this->assertEquals('-', $mappedNew[$foto1Idx]);
+        $this->assertEquals('-', $mappedNew[$laporanIdx]);
+        $this->assertStringContainsString('foto/old1.jpg', $mappedOld[$foto1Idx]);
+        $this->assertStringContainsString('laporan/old.pdf', $mappedOld[$laporanIdx]);
+
+        // Pastikan filename dengan tahun_ajaran "2026/2027" aman tanpa karakter "/"
+        $resDownload = $this->actingAs($superAdmin)->get('/api/magang/export/excel?tahun_ajaran=2026/2027');
+        $resDownload->assertStatus(200);
+        $disposition = (string) $resDownload->headers->get('content-disposition');
+        $this->assertStringContainsString('2026-2027', $disposition);
+        $this->assertStringNotContainsString('2026/2027', $disposition);
     }
 }
