@@ -14,6 +14,8 @@ application. Prefer incremental, traceable, and reversible changes.
 
 ## Repository
 
+Always use best practice for every commit and push
+
 Historical/current baseline repository:
 
 https://github.com/WahyuAgg/pmld_si_magang_be
