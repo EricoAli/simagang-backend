@@ -19,6 +19,7 @@ class Mahasiswa extends Model
         'nim',
         'nama',
         'angkatan',
+        'tahun_ajaran_id',
     ];
 
     protected $hidden = [
@@ -49,6 +50,11 @@ class Mahasiswa extends Model
     public function prodi()
     {
         return $this->belongsTo(Prodi::class, 'prodi_id', 'prodi_id');
+    }
+
+    public function masterTahunAjaran()
+    {
+        return $this->belongsTo(TahunAjaran::class, 'tahun_ajaran_id', 'tahun_ajaran_id');
     }
 
     public function magang()

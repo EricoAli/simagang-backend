@@ -13,15 +13,26 @@ class Dosbing extends Model
     protected $primaryKey = 'dosbing_id';
 
     protected $fillable = [
+        'prodi_id',
         'nip',
         'nama',
     ];
+
+    protected $casts = [
+        'prodi_id' => 'integer',
+    ];
+
     protected $hidden = [
         'created_at',
         'updated_at',
     ];
 
     // 🔗 Relasi
+    public function prodi()
+    {
+        return $this->belongsTo(Prodi::class, 'prodi_id', 'prodi_id');
+    }
+
     public function magang()
     {
         return $this->hasMany(Magang::class, 'dosbing_id', 'dosbing_id');
