@@ -3,11 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Admin;
+use App\Models\Dosbing;
 use App\Models\JadwalPresentasi;
 use App\Models\Magang;
 use App\Models\Mahasiswa;
+use App\Models\PeriodeMagang;
 use App\Models\Prodi;
 use App\Models\User;
+use Database\Seeders\PeriodeMagangSeeder;
 use Database\Seeders\ProdiSeeder;
 use Database\Seeders\SuperAdminSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -356,5 +359,110 @@ class JadwalPresentasiTest extends TestCase
             'jadwal_id' => $jadwal->jadwal_id,
             'magang_id' => null,
         ]);
+    }
+
+    // 11. Sesi presentasi multi-peserta dengan dosen_penguji_id & pembimbing!=penguji
+    public function test_admin_can_create_multi_peserta_session_manage_participants_and_filter_by_dosbing()
+    {
+        $this->seed(PeriodeMagangSeeder::class);
+
+        $adminTRPL = $this->createAdmin($this->prodiTRPL->prodi_id);
+        $adminTRIK = $this->createAdmin($this->prodiTRIK->prodi_id);
+
+        $dosbing1 = Dosbing::create(['prodi_id' => $this->prodiTRPL->prodi_id, 'nip' => '198101012005011001', 'nama' => 'Dosen Pembimbing A']);
+        $penguji = Dosbing::create(['prodi_id' => $this->prodiTRPL->prodi_id, 'nip' => '198202022006021002', 'nama' => 'Dosen Penguji B']);
+
+        [$userA, $mhsA] = $this->createMahasiswa($this->prodiTRPL->prodi_id);
+        [$userB, $mhsB] = $this->createMahasiswa($this->prodiTRPL->prodi_id);
+        [, $mhsTRIK] = $this->createMahasiswa($this->prodiTRIK->prodi_id);
+
+        $periode6 = PeriodeMagang::where('semester_magang', 6)->firstOrFail();
+
+        $magangA = Magang::create([
+            'mahasiswa_id' => $mhsA->mahasiswa_id,
+            'dosbing_id' => $dosbing1->dosbing_id,
+            'periode_id' => $periode6->periode_id,
+            'semester_magang' => 6,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        // Magang B dibimbing oleh $penguji sehingga TIDAK boleh diuji oleh $penguji
+        $magangB = Magang::create([
+            'mahasiswa_id' => $mhsB->mahasiswa_id,
+            'dosbing_id' => $penguji->dosbing_id,
+            'periode_id' => $periode6->periode_id,
+            'semester_magang' => 6,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        $magangTRIK = Magang::create([
+            'mahasiswa_id' => $mhsTRIK->mahasiswa_id,
+            'periode_id' => $periode6->periode_id,
+            'semester_magang' => 6,
+            'status_magang' => 'berlangsung',
+        ]);
+
+        // Buat sesi tanpa magang_id (sesi baru FE DetailSesi)
+        $resCreate = $this->actingAs($adminTRPL)->postJson('/api/jadwal-presentasi', [
+            'dosen_penguji_id' => $penguji->dosbing_id,
+            'tanggal_presentasi' => '2026-12-01',
+            'waktu_mulai' => '09:00',
+            'waktu_selesai' => '11:00',
+            'ruangan' => 'Ruang Sidang DTEDI',
+            'keterangan' => 'Sesi PI Gelombang 1',
+        ]);
+        $resCreate->assertStatus(201)
+            ->assertJsonPath('data.dosen_penguji', 'Dosen Penguji B');
+
+        $jadwalId = $resCreate->json('data.jadwal_id');
+
+        // Admin prodi lain ditolak mengelola sesi ini -> 403
+        $this->actingAs($adminTRIK)->getJson("/api/jadwal-presentasi/{$jadwalId}")->assertStatus(403);
+
+        // Eligible list berisi magangA, TIDAK berisi magangB (dosbing=penguji) dan magangTRIK (beda prodi)
+        $eligibleRes = $this->actingAs($adminTRPL)->getJson("/api/jadwal-presentasi/{$jadwalId}/mahasiswa-eligible");
+        $eligibleRes->assertStatus(200);
+        $eligibleIds = collect($eligibleRes->json('data'))->pluck('magang_id')->all();
+        $this->assertContains($magangA->magang_id, $eligibleIds);
+        $this->assertNotContains($magangB->magang_id, $eligibleIds);
+        $this->assertNotContains($magangTRIK->magang_id, $eligibleIds);
+
+        // Tambah magangB ditolak 422 (pembimbing == penguji), magangTRIK ditolak 403
+        $this->actingAs($adminTRPL)->postJson("/api/jadwal-presentasi/{$jadwalId}/peserta", ['magang_id' => $magangB->magang_id])->assertStatus(422);
+        $this->actingAs($adminTRPL)->postJson("/api/jadwal-presentasi/{$jadwalId}/peserta", ['magang_id' => $magangTRIK->magang_id])->assertStatus(403);
+
+        // Tambah magangA -> 201
+        $this->actingAs($adminTRPL)->postJson("/api/jadwal-presentasi/{$jadwalId}/peserta", ['magang_id' => $magangA->magang_id])->assertStatus(201);
+
+        // Peserta list & Advisees filter by dosbing_id
+        $pesertaRes = $this->actingAs($adminTRPL)->getJson("/api/jadwal-presentasi/{$jadwalId}/peserta");
+        $pesertaRes->assertStatus(200);
+        $this->assertCount(1, $pesertaRes->json('data'));
+
+        // Detail magang A sekarang menampilkan jadwal via pivot beserta dosen_penguji
+        $this->actingAs($userA)->getJson("/api/magang/{$magangA->magang_id}/detail")
+            ->assertStatus(200)
+            ->assertJsonPath('jadwal_presentasi.jadwal_id', $jadwalId)
+            ->assertJsonPath('jadwal_presentasi.dosen_penguji', 'Dosen Penguji B');
+
+        // Filter jadwal berdasarkan dosbing_id & mahasiswa melihat jadwal via pivot
+        $this->actingAs($adminTRPL)->getJson("/api/jadwal-presentasi?dosbing_id={$dosbing1->dosbing_id}")
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data');
+
+        $this->actingAs($userA)->getJson('/api/jadwal-presentasi')
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data');
+
+        // Advisees endpoint
+        $this->actingAs($adminTRPL)->getJson("/api/jadwal-presentasi/advisees?dosbing_id={$dosbing1->dosbing_id}")
+            ->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.status_penjadwalan', 'sudah_dijadwalkan');
+
+        // Hapus peserta
+        $this->actingAs($adminTRPL)->deleteJson("/api/jadwal-presentasi/{$jadwalId}/peserta/{$magangA->magang_id}")
+            ->assertStatus(200);
+        $this->assertCount(0, $this->actingAs($adminTRPL)->getJson("/api/jadwal-presentasi/{$jadwalId}/peserta")->json('data'));
     }
 }

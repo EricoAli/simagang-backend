@@ -175,11 +175,16 @@ Route::prefix('dokumen-magang')
 Route::prefix('jadwal-presentasi')
     ->middleware(['auth.api:sanctum', 'role:admin,mahasiswa,mitra,dosbing,super_admin'])
     ->controller(JadwalPresentasiController::class)->group(function () {
+        Route::get('/advisees', 'advisees');
         Route::get('/', 'index');
         Route::post('/', 'store');
-        Route::get('/{id}', 'show');
-        Route::put('/{id}', 'update');
-        Route::delete('/{id}', 'destroy');
+        Route::get('/{id}', 'show')->whereNumber('id');
+        Route::put('/{id}', 'update')->whereNumber('id');
+        Route::delete('/{id}', 'destroy')->whereNumber('id');
+        Route::get('/{id}/peserta', 'peserta')->whereNumber('id');
+        Route::get('/{id}/mahasiswa-eligible', 'mahasiswaEligible')->whereNumber('id');
+        Route::post('/{id}/peserta', 'addPeserta')->whereNumber('id');
+        Route::delete('/{id}/peserta/{magangId}', 'removePeserta')->whereNumber(['id', 'magangId']);
     });
 
 
